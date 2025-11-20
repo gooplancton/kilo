@@ -54,6 +54,11 @@
 #include <fcntl.h>
 #include <signal.h>
 
+#ifdef PLUGINS_ENABLED
+#include "ForthParser.h"
+#include "ForthBuiltins.h"
+#endif
+
 /* Syntax highlight types */
 #define HL_NORMAL 0
 #define HL_NONPRINT 1
@@ -93,6 +98,24 @@ typedef struct hlcolor {
     int r,g,b;
 } hlcolor;
 
+#ifdef PLUGINS_ENABLED
+// forth builtin: kilo_onkey
+// e.g.: ['cursor_down [1 kilo_get_cy add kilo_set_cy] define]
+//       [17 'cursor_down kilo_onkey]
+struct onKeyCallback {
+    int key;                /* Key that triggerst eh callback */
+    ForthObject *cb_obj;    /* Either a symbol that resolves to a closure OR a list (anonymous cb) */
+};
+
+// TODO: other types of callback (e.g. onStartup, onTimeout, onExit, etc...)
+
+struct callbackTable {
+    struct onKeyCallback *onKeyCallbacks;
+    int onKeyCallbacksLen;
+};
+
+#endif
+
 struct editorConfig {
     int cx,cy;  /* Cursor x and y position in characters */
     int rowoff;     /* Offset of row displayed. */
@@ -107,9 +130,98 @@ struct editorConfig {
     char statusmsg[80];
     time_t statusmsg_time;
     struct editorSyntax *syntax;    /* Current syntax highlight, or NULL. */
+
+#ifdef PLUGINS_ENABLED
+    struct callbackTable *callbacks;
+#endif
 };
 
 static struct editorConfig E;
+
+#ifdef PLUGINS_ENABLED
+static ForthInterpreter *F;
+
+void kiloGetCursorX(ForthInterpreter *f) {
+    ForthObject *cx = ForthObject__new_number((double)E.cx);
+    ForthObject__list_push_move(f->stack, cx);
+}
+
+void kiloSetCursorX(ForthInterpreter *f) {
+    ForthObject *cx = ForthInterpreter__pop_arg_typed(f, Number);
+    E.cx = (int)cx->num;
+    ForthObject__drop(cx);
+}
+
+void editorProcessKeypress(int c);
+
+void kiloProcessKey(ForthInterpreter *f) {
+    ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
+    editorProcessKeypress(key->num);
+    ForthObject__drop(key);
+}
+
+void kiloOnKey(ForthInterpreter *f) {
+    ForthObject *obj = ForthInterpreter__pop_arg(f);
+    if (obj->type != Symbol && obj->type != List) {
+        // type error in plugin (how to best handle this?)
+        ForthObject__drop(obj);
+        return;
+    }
+
+    ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
+    int k = (int)key->num;
+    ForthObject__drop(key);
+
+    if (!E.callbacks) {
+        E.callbacks = calloc(1, sizeof(*E.callbacks));
+    }
+
+    int newlen = E.callbacks->onKeyCallbacksLen + 1;
+    struct onKeyCallback *newarr = realloc(E.callbacks->onKeyCallbacks,
+                                           sizeof(struct onKeyCallback) * newlen);
+    if (!newarr) {
+        ForthObject__drop(obj);
+        return;
+    }
+    E.callbacks->onKeyCallbacks = newarr;
+    E.callbacks->onKeyCallbacksLen = newlen;
+
+    E.callbacks->onKeyCallbacks[newlen - 1].key = k;
+    E.callbacks->onKeyCallbacks[newlen - 1].cb_obj = obj;
+}
+
+void initInterpreter(void) {
+    F = ForthInterpreter__new();
+    ForthInterpreter__load_builtins(F);
+    ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
+    ForthInterpreter__register_function(F, "kilo_get_cx", kiloGetCursorX);
+    ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
+    ForthInterpreter__register_function(F, "kilo_process_key", kiloProcessKey);
+
+    // TODO: read and execute plugin source files
+    ForthParser parser;
+    parser.offset = 0;
+    parser.string = "['cursor_right [1 kilo_get_cx add kilo_set_cx] define]";
+    ForthObject *o1 = ForthParser__parse_list(&parser);
+    ForthInterpreter__eval(F, o1);
+
+    parser.offset = 0;
+    parser.string = "[12 'cursor_right kilo_onkey]";
+    ForthObject *o2 = ForthParser__parse_list(&parser);
+    ForthInterpreter__eval(F, o2);
+}
+
+ForthObject *editorGetOnKeyCallback(int c) {
+    if (!E.callbacks) return NULL;
+
+    for (int i = 0; i < E.callbacks->onKeyCallbacksLen; i++) {
+        if (c == E.callbacks->onKeyCallbacks[i].key)
+            return E.callbacks->onKeyCallbacks[i].cb_obj;
+    }
+
+    return NULL;
+}
+#endif
 
 enum KEY_ACTION{
         KEY_NULL = 0,       /* NULL */
@@ -1185,12 +1297,34 @@ void editorMoveCursor(int key) {
 /* Process events arriving from the standard input, which is, the user
  * is typing stuff on the terminal. */
 #define KILO_QUIT_TIMES 3
-void editorProcessKeypress(int fd) {
+void editorProcessKeypress(int c) {
     /* When the file is modified, requires Ctrl-q to be pressed N times
      * before actually quitting. */
     static int quit_times = KILO_QUIT_TIMES;
 
-    int c = editorReadKey(fd);
+#ifdef PLUGINS_ENABLED
+    ForthObject *cb_sym = editorGetOnKeyCallback(c);
+    if (cb_sym) {
+        switch (cb_sym->type) {
+        case List: 
+            ForthInterpreter__eval(F, cb_sym);
+            break;
+        case Symbol: {
+            SymbolsTableEntry *entry = SymbolsTable__get(F->symbols, cb_sym->string.chars);
+            if (entry->type == ListClosure)
+                ForthInterpreter__eval(F, entry->obj);
+
+            SymbolsTableEntry__drop(entry);
+            break;
+        }
+        default:
+            break;
+        }
+
+        return;
+    }
+#endif
+
     switch(c) {
     case ENTER:         /* Enter */
         editorInsertNewline();
@@ -1213,7 +1347,7 @@ void editorProcessKeypress(int fd) {
         editorSave();
         break;
     case CTRL_F:
-        editorFind(fd);
+        editorFind(STDIN_FILENO);
         break;
     case BACKSPACE:     /* Backspace */
     case CTRL_H:        /* Ctrl-h */
@@ -1295,6 +1429,9 @@ int main(int argc, char **argv) {
     }
 
     initEditor();
+#ifdef PLUGINS_ENABLED
+    initInterpreter();
+#endif
     editorSelectSyntaxHighlight(argv[1]);
     editorOpen(argv[1]);
     enableRawMode(STDIN_FILENO);
@@ -1302,7 +1439,8 @@ int main(int argc, char **argv) {
         "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
     while(1) {
         editorRefreshScreen();
-        editorProcessKeypress(STDIN_FILENO);
+        int c = editorReadKey(STDIN_FILENO);
+        editorProcessKeypress(c);
     }
     return 0;
 }

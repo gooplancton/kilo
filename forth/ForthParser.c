@@ -28,7 +28,7 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted)
 
     size_t len = 0;
 
-    while (isalpha((unsigned char)shifted[len]))
+    while (isalpha((unsigned char)shifted[len]) || (unsigned char)shifted[len] == '_')
         len++;
 
     if (len == 0)
