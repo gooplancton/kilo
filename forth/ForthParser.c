@@ -87,7 +87,10 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_string(self);
             if (newObj == NULL)
+            {
+                printf("Parsing error: Could not parse string");
                 exit(1);
+            }
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -96,7 +99,10 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_list(self);
             if (newObj == NULL)
+            {
+                printf("Parsing error: Could not parse list");
                 exit(1);
+            }
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -105,7 +111,10 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_number(self);
             if (newObj == NULL)
+            {
+                printf("Parsing error: Could not parse number");
                 exit(1);
+            }
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -119,7 +128,10 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
                 newObj = ForthParser__parse_symbol(self);
 
             if (newObj == NULL)
+            {
+                printf("Parsing error: Could not parse number/symbol");
                 exit(1);
+            }
 
             ForthObject__list_push_move(obj, newObj);
             break;

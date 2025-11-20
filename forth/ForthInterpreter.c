@@ -78,8 +78,9 @@ void SymbolsTable__add_literal(SymbolsTable *self, char *key, ForthObject *liter
     SymbolsTableEntry *existing_entry = SymbolsTable__get(self, key);
     if (existing_entry)
     {
+        ForthObject__drop(existing_entry->literal);
         existing_entry->type = ObjLiteral;
-        existing_entry->literal = literal;
+        existing_entry->literal = ForthObject__rc_clone(literal);
         return;
     }
 
@@ -177,16 +178,18 @@ void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
             SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
             if (!entry)
             {
-                // runtime error: unknown symbol
+                printf("Runtime error: Unknown Symbol");
                 exit(1);
             }
 
             switch (entry->type)
             {
             case ObjLiteral:
-                ForthObject__list_push_copy(self->stack, expr->list.data[i]);
+                ForthObject__list_push_copy(self->stack, entry->literal);
+                break;
             case Function:
                 entry->function(self);
+                break;
             }
         }
         else
@@ -199,13 +202,15 @@ void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
 ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self, ForthObjectType type)
 {
     ForthObject *arg = ForthObject__list_pop(self->stack);
-    if (!arg) {
-        // Arity-error
+    if (!arg)
+    {
+        printf("Runtime error: Stack underflow");
         exit(1);
     }
 
-    if (arg->type != type) {
-        // Type-error
+    if (arg->type != type)
+    {
+        printf("Runtime error: Type mismatch");
         exit(1);
     }
 

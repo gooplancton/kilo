@@ -25,9 +25,10 @@ int main(void)
     ForthInterpreter *in = ForthInterpreter__new();
     ForthInterpreter__register_function(in, "add", builtin_add);
     ForthInterpreter__register_function(in, "print", builtin_print);
+    ForthInterpreter__register_literal(in, "pi", ForthObject__new_number(3.1415));
 
     ForthParser parser = {
-        .string = "[1 1 add print]"};
+        .string = "[1 pi add print]"};
 
     ForthObject *expr = ForthParser__parse_list(&parser);
 
