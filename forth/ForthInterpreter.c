@@ -1,6 +1,6 @@
 #include "ForthInterpreter.h"
 
-SymbolsTableEntry *SymbolsTableEntry__new_literal(char *key, ForthObject *val)
+SymbolsTableEntry *SymbolsTableEntry__new_object(char *key, ForthObject *obj, SymbolsTableEntryType type)
 {
     size_t key_len = strlen(key) + 1;
     size_t alloc_size = sizeof(SymbolsTableEntry) + key_len;
@@ -9,11 +9,21 @@ SymbolsTableEntry *SymbolsTableEntry__new_literal(char *key, ForthObject *val)
     if (!self)
         abort();
 
-    self->type = ObjLiteral;
-    self->literal = ForthObject__rc_clone(val);
+    self->type = type;
+    self->obj = ForthObject__rc_clone(obj);
     memcpy(self->key, key, key_len);
 
     return self;
+}
+
+SymbolsTableEntry *SymbolsTableEntry__new_literal(char *key, ForthObject *obj)
+{
+    return SymbolsTableEntry__new_object(key, obj, ObjLiteral);
+}
+
+SymbolsTableEntry *SymbolsTableEntry__new_closure(char *key, ForthObject *obj)
+{
+    return SymbolsTableEntry__new_object(key, obj, ListClosure);
 }
 
 SymbolsTableEntry *SymbolsTableEntry__new_function(char *key, void (*function)(ForthInterpreter *interpreter))
@@ -34,7 +44,16 @@ SymbolsTableEntry *SymbolsTableEntry__new_function(char *key, void (*function)(F
 
 void SymbolsTableEntry__drop(SymbolsTableEntry *self)
 {
-    ForthObject__drop(self->literal);
+    switch (self->type)
+    {
+    case ListClosure:
+    case ObjLiteral:
+        ForthObject__drop(self->obj);
+        break;
+    case Function:
+        // Function pointers don't need to be freed
+        break;
+    }
     free(self);
 }
 
@@ -73,21 +92,30 @@ void SymbolsTable__reserve_slot(SymbolsTable *self)
     }
 }
 
-void SymbolsTable__add_literal(SymbolsTable *self, char *key, ForthObject *literal)
+void SymbolsTable__add_object(SymbolsTable *self, char *key, ForthObject *obj, SymbolsTableEntryType type)
 {
     SymbolsTableEntry *existing_entry = SymbolsTable__get(self, key);
     if (existing_entry)
     {
-        ForthObject__drop(existing_entry->literal);
-        existing_entry->type = ObjLiteral;
-        existing_entry->literal = ForthObject__rc_clone(literal);
+        if (existing_entry->type != Function)
+            ForthObject__drop(existing_entry->obj);
+        existing_entry->type = type;
+        existing_entry->obj = ForthObject__rc_clone(obj);
         return;
     }
 
     SymbolsTable__reserve_slot(self);
 
-    self->entries[self->len] = SymbolsTableEntry__new_literal(key, literal);
+    self->entries[self->len] = SymbolsTableEntry__new_object(key, obj, type);
     self->len += 1;
+}
+
+void SymbolsTable__add_literal(SymbolsTable *self, char *key, ForthObject *literal) {
+    SymbolsTable__add_object(self, key, literal, ObjLiteral);
+}
+
+void SymbolsTable__add_closure(SymbolsTable *self, char *key, ForthObject *closure) {
+    SymbolsTable__add_object(self, key, closure, ListClosure);
 }
 
 void SymbolsTable__add_function(SymbolsTable *self, char *key, void (*function)(ForthInterpreter *interpreter))
@@ -167,6 +195,17 @@ void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, Forth
     SymbolsTable__add_literal(self->symbols, key, literal);
 }
 
+void ForthInterpreter__register_closure(ForthInterpreter *self, char *key, ForthObject *closure)
+{
+    if (closure->type != List)
+    {
+        printf("Runtime error: Expected list");
+        exit(1);
+    }
+
+    SymbolsTable__add_closure(self->symbols, key, closure);
+}
+
 void ForthInterpreter__register_function(ForthInterpreter *self, char *key, void (*function)(ForthInterpreter *interpreter))
 {
     SymbolsTable__add_function(self->symbols, key, function);
@@ -191,10 +230,13 @@ void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
             switch (entry->type)
             {
             case ObjLiteral:
-                ForthObject__list_push_copy(self->stack, entry->literal);
+                ForthObject__list_push_copy(self->stack, entry->obj);
                 break;
             case Function:
                 entry->function(self);
+                break;
+            case ListClosure:
+                ForthInterpreter__eval(self, entry->obj);
                 break;
             }
         }

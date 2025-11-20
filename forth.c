@@ -26,14 +26,6 @@ void builtin_eval(ForthInterpreter *in)
     ForthInterpreter__eval(in, expr);
 }
 
-void builtin_unquote(ForthInterpreter *in)
-{
-    ForthObject *sym = ForthInterpreter__pop_arg_typed(in, Symbol);
-    sym->string.quoted = false;
-
-    ForthObject__list_push_move(in->stack, sym);
-}
-
 void builtin_define(ForthInterpreter *in)
 {
     ForthObject *val = ForthInterpreter__pop_arg(in);
@@ -45,7 +37,10 @@ void builtin_define(ForthInterpreter *in)
         exit(1);
     }
 
-    ForthInterpreter__register_literal(in, key->string.chars, val);
+    if (val->type == List)
+        ForthInterpreter__register_closure(in, key->string.chars, val);
+    else
+        ForthInterpreter__register_literal(in, key->string.chars, val);
 }
 
 void builtin_print_symbols(ForthInterpreter *in)
@@ -64,7 +59,6 @@ int main(void)
     ForthInterpreter__register_function(in, "add", builtin_add);
     ForthInterpreter__register_function(in, "print", builtin_print);
     ForthInterpreter__register_function(in, "eval", builtin_eval);
-    ForthInterpreter__register_function(in, "unquote", builtin_unquote);
     ForthInterpreter__register_function(in, "define", builtin_define);
     ForthInterpreter__register_function(in, "symbols", builtin_print_symbols);
     ForthInterpreter__register_literal(in, "pi", ForthObject__new_number(3.1415));

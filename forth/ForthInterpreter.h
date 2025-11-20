@@ -9,6 +9,7 @@ typedef enum SymbolsTableEntryType
 {
     ObjLiteral,
     Function,
+    ListClosure,
 } SymbolsTableEntryType;
 
 // NOTE: forward-declaration for FunctionEntry type
@@ -19,13 +20,14 @@ typedef struct SymbolsTableEntry
     SymbolsTableEntryType type;
     union
     {
-        ForthObject *literal;
+        ForthObject *obj;
         void (*function)(ForthInterpreter *interpreter);
     };
     char key[];
 } SymbolsTableEntry;
 
 SymbolsTableEntry *SymbolsTableEntry__new_literal(char *key, ForthObject *literal);
+SymbolsTableEntry *SymbolsTableEntry__new_closure(char *key, ForthObject *closure);
 SymbolsTableEntry *SymbolsTableEntry__new_function(char *key, void (*function)(ForthInterpreter *interpreter));
 void SymbolsTableEntry__drop(SymbolsTableEntry *self);
 
@@ -41,6 +43,7 @@ void SymbolsTable__drop(SymbolsTable *self);
 
 void SymbolsTable__add_literal(SymbolsTable *self, char *key, ForthObject *val);
 void SymbolsTable__add_function(SymbolsTable *self, char *key, void (*function)(ForthInterpreter *interpreter));
+void SymbolsTable__add_closure(SymbolsTable *self, char *key, ForthObject *closure);
 bool SymbolsTable__has(SymbolsTable *self, char *key);
 SymbolsTableEntry *SymbolsTable__get(SymbolsTable *self, char *key);
 void SymbolsTable__remove(SymbolsTable *self, char *key);
@@ -54,7 +57,8 @@ typedef struct ForthInterpreter
 ForthInterpreter *ForthInterpreter__new(void);
 void ForthInterpreter__drop(ForthInterpreter *self);
 
-void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, ForthObject *val);
+void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, ForthObject *literal);
+void ForthInterpreter__register_closure(ForthInterpreter *self, char *key, ForthObject *closure);
 void ForthInterpreter__register_function(ForthInterpreter *self, char *key, void (*function)(ForthInterpreter *interpreter));
 
 void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr);

@@ -118,6 +118,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
             }
 
             ForthObject__list_push_move(obj, newObj);
+            self->offset += 1;
             break;
         }
         case '-':
