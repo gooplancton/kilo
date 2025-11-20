@@ -22,7 +22,6 @@ void ForthObject__drop(ForthObject *obj)
             free(obj->list.data);
             break;
         case String:
-        case QuotedSymbol:
         case Symbol:
             free(obj->string.chars);
             break;
@@ -55,13 +54,14 @@ ForthObject *ForthObject__new_string(char *string, size_t len)
         abort();
     memcpy(obj->string.chars, string, len);
     obj->string.chars[len] = '\0';
+    obj->string.quoted = false;
     obj->string.len = len;
     obj->ref_count = 1;
 
     return obj;
 }
 
-ForthObject *ForthObject__new_symbol(char *string, size_t len)
+ForthObject *ForthObject__new_symbol(char *string, size_t len, bool quoted)
 {
     ForthObject *obj = malloc(sizeof(*obj));
     if (!obj)
@@ -73,6 +73,7 @@ ForthObject *ForthObject__new_symbol(char *string, size_t len)
     memcpy(obj->string.chars, string, len);
     obj->string.chars[len] = '\0';
     obj->string.len = len;
+    obj->string.quoted = quoted;
     obj->ref_count = 1;
 
     return obj;
@@ -136,14 +137,14 @@ void ForthObject__print(ForthObject *obj)
 {
     switch (obj->type)
     {
+    case Symbol:
+        if (obj->string.quoted)
+            printf("'%.*s", (int)obj->string.len, obj->string.chars);
+        else
+            printf("%.*s", (int)obj->string.len, obj->string.chars);
+        break;
     case String:
         printf("\"%.*s\"", (int)obj->string.len, obj->string.chars);
-        break;
-    case QuotedSymbol:
-        printf("'%.*s", (int)obj->string.len, obj->string.chars);
-        break;
-    case Symbol:
-        printf("%.*s", (int)obj->string.len, obj->string.chars);
         break;
     case Number:
         printf("%g", obj->num);

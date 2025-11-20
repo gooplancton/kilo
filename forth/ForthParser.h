@@ -11,7 +11,7 @@ typedef struct ForthParser
 
 //  Parsers
 ForthObject *ForthParser__parse_string(ForthParser *self);
-ForthObject *ForthParser__parse_symbol(ForthParser *self);
+ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted);
 ForthObject *ForthParser__parse_number(ForthParser *self);
 ForthObject *ForthParser__parse_list(ForthParser *self);
 

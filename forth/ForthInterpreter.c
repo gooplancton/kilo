@@ -158,6 +158,12 @@ void ForthInterpreter__drop(ForthInterpreter *self)
 
 void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, ForthObject *literal)
 {
+    if (literal->type == Symbol && !literal->string.quoted)
+    {
+        printf("Runtime error: Attempting to register an unquoted symbol");
+        exit(1);
+    }
+
     SymbolsTable__add_literal(self->symbols, key, literal);
 }
 
@@ -172,13 +178,13 @@ void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
 
     for (size_t i = 0; i < expr->list.len; i++)
     {
-        if (expr->list.data[i]->type == Symbol)
+        if (expr->list.data[i]->type == Symbol && !expr->list.data[i]->string.quoted)
         {
             char *key = expr->list.data[i]->string.chars;
             SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
             if (!entry)
             {
-                printf("Runtime error: Unknown Symbol");
+                printf("Runtime error: Unknown Symbol: %s", key);
                 exit(1);
             }
 
@@ -199,7 +205,7 @@ void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
     }
 }
 
-ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self, ForthObjectType type)
+ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self)
 {
     ForthObject *arg = ForthObject__list_pop(self->stack);
     if (!arg)
@@ -208,6 +214,12 @@ ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self, ForthObjectType t
         exit(1);
     }
 
+    return arg;
+}
+
+ForthObject *ForthInterpreter__pop_arg_typed(ForthInterpreter *self, ForthObjectType type)
+{
+    ForthObject *arg = ForthInterpreter__pop_arg(self);
     if (arg->type != type)
     {
         printf("Runtime error: Type mismatch");

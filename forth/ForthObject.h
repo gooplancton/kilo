@@ -17,7 +17,6 @@ typedef enum
     String,
     List,
     Symbol,
-    QuotedSymbol,
 } ForthObjectType;
 
 typedef struct ForthObject
@@ -30,6 +29,7 @@ typedef struct ForthObject
         struct
         {
             size_t len;
+            bool quoted;
             char *chars;
         } string;
         struct
@@ -48,7 +48,7 @@ void ForthObject__drop(ForthObject *obj);
 // Factories
 ForthObject *ForthObject__new_number(double num);
 ForthObject *ForthObject__new_string(char *string, size_t len);
-ForthObject *ForthObject__new_symbol(char *string, size_t len);
+ForthObject *ForthObject__new_symbol(char *string, size_t len, bool quoted);
 ForthObject *ForthObject__new_list(void);
 
 // List push/pop

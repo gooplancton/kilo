@@ -20,7 +20,7 @@ ForthObject *ForthParser__parse_string(ForthParser *self)
     return ForthObject__new_string(shifted + 1, len);
 }
 
-ForthObject *ForthParser__parse_symbol(ForthParser *self)
+ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted)
 {
     char *shifted = self->string + self->offset;
     if (shifted[0] == '\0')
@@ -36,7 +36,7 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self)
 
     self->offset += len;
 
-    return ForthObject__new_symbol(shifted, len);
+    return ForthObject__new_symbol(shifted, len, quoted);
 }
 
 ForthObject *ForthParser__parse_number(ForthParser *self)
@@ -83,6 +83,19 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             return obj;
         }
+        case '\'':
+        {
+            self->offset += 1;
+            ForthObject *newObj = ForthParser__parse_symbol(self, true);
+            if (newObj == NULL)
+            {
+                printf("Parsing error: Could not parse quoted symbol");
+                exit(1);
+            }
+
+            ForthObject__list_push_move(obj, newObj);
+            break;
+        }
         case '"':
         {
             ForthObject *newObj = ForthParser__parse_string(self);
@@ -125,7 +138,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
             if (isdigit((unsigned char)self->string[self->offset]))
                 newObj = ForthParser__parse_number(self);
             else
-                newObj = ForthParser__parse_symbol(self);
+                newObj = ForthParser__parse_symbol(self, false);
 
             if (newObj == NULL)
             {

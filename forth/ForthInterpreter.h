@@ -58,6 +58,7 @@ void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, Forth
 void ForthInterpreter__register_function(ForthInterpreter *self, char *key, void (*function)(ForthInterpreter *interpreter));
 
 void ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr);
-ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self, ForthObjectType type);
+ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self);
+ForthObject *ForthInterpreter__pop_arg_typed(ForthInterpreter *self, ForthObjectType type);
 
 #endif
