@@ -2,6 +2,12 @@
 #define FORTH_OBJECT_H
 
 #include <ctype.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 #define DEFAULT_LIST_CAP 10
 
@@ -11,6 +17,7 @@ typedef enum
     String,
     List,
     Symbol,
+    QuotedSymbol,
 } ForthObjectType;
 
 typedef struct ForthObject
@@ -42,10 +49,9 @@ void ForthObject__drop(ForthObject *obj);
 ForthObject *ForthObject__new_number(double num);
 ForthObject *ForthObject__new_string(char *string, size_t len);
 ForthObject *ForthObject__new_symbol(char *string, size_t len);
-ForthObject *ForthObject__new_list(size_t cap);
+ForthObject *ForthObject__new_list(void);
 
-// List (de)allocation
-void ForthObject__list_reserve_slot(ForthObject *self);
+// List push/pop
 void ForthObject__list_push_copy(ForthObject *self, ForthObject *obj);
 void ForthObject__list_push_move(ForthObject *self, ForthObject *obj);
 ForthObject *ForthObject__list_pop(ForthObject *self);

@@ -1,10 +1,4 @@
 #include "ForthObject.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
 
 ForthObject *ForthObject__rc_clone(ForthObject *obj)
 {
@@ -28,6 +22,7 @@ void ForthObject__drop(ForthObject *obj)
             free(obj->list.data);
             break;
         case String:
+        case QuotedSymbol:
         case Symbol:
             free(obj->string.chars);
             break;
@@ -83,15 +78,15 @@ ForthObject *ForthObject__new_symbol(char *string, size_t len)
     return obj;
 }
 
-ForthObject *ForthObject__new_list(size_t cap)
+ForthObject *ForthObject__new_list(void)
 {
     ForthObject *obj = malloc(sizeof(*obj));
     if (!obj)
         abort();
     obj->type = List;
     obj->list.len = 0;
-    obj->list.cap = cap;
-    obj->list.data = malloc(sizeof(*obj->list.data) * cap);
+    obj->list.cap = DEFAULT_LIST_CAP;
+    obj->list.data = malloc(sizeof(*obj->list.data) * DEFAULT_LIST_CAP);
     if (!obj->list.data)
         abort();
     obj->ref_count = 1;
@@ -143,6 +138,9 @@ void ForthObject__print(ForthObject *obj)
     {
     case String:
         printf("\"%.*s\"", (int)obj->string.len, obj->string.chars);
+        break;
+    case QuotedSymbol:
+        printf("'%.*s", (int)obj->string.len, obj->string.chars);
         break;
     case Symbol:
         printf("%.*s", (int)obj->string.len, obj->string.chars);

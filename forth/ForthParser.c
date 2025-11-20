@@ -1,11 +1,4 @@
 #include "ForthParser.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <ctype.h>
 
 ForthObject *ForthParser__parse_string(ForthParser *self)
 {
@@ -73,7 +66,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
     assert(self->string[self->offset] == '[');
     self->offset += 1;
 
-    ForthObject *obj = ForthObject__new_list(DEFAULT_LIST_CAP);
+    ForthObject *obj = ForthObject__new_list();
 
     while (self->string[self->offset])
     {
