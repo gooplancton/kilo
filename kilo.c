@@ -1507,12 +1507,16 @@ void initEditor(void) {
     signal(SIGWINCH, handleSigWinCh);
 }
 
+void clearScreen() {
+    write(STDOUT_FILENO,"\x1b[1;1H\x1b[J",9);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr,"Usage: kilo <filename>\n");
         exit(1);
     }
-
+    atexit(clearScreen);
     initEditor();
 #ifdef PLUGINS_ENABLED
     initInterpreter();

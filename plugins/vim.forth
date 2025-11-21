@@ -21,7 +21,7 @@ Basic movement with hjkl (no repeaters for now)
 
 ['vim_h [
 	vim_is_normal
-	[kilo_get_cx 1 sub kilo_set_cx]
+	[1000 kilo_process_key]
 	[104 kilo_process_key]
 	ifelse
 ] define]
@@ -29,7 +29,7 @@ Basic movement with hjkl (no repeaters for now)
 
 ['vim_j [
 	vim_is_normal
-	[kilo_get_cy 1 add kilo_set_cy]
+	[1003 kilo_process_key]
 	[106 kilo_process_key]
 	ifelse
 ] define]
@@ -37,7 +37,7 @@ Basic movement with hjkl (no repeaters for now)
 
 ['vim_k [
 	vim_is_normal
-	[kilo_get_cy 1 sub kilo_set_cy]
+	[1002 kilo_process_key]
 	[107 kilo_process_key] 
 	ifelse
 ] define]
@@ -45,7 +45,7 @@ Basic movement with hjkl (no repeaters for now)
 
 ['vim_l [
 	vim_is_normal
-	[kilo_get_cx 1 add kilo_set_cx]
+	[1001 kilo_process_key]
 	[108 kilo_process_key]
 	ifelse
 ] define]
