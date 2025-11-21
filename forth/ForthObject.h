@@ -58,5 +58,6 @@ ForthObject *ForthObject__list_pop(ForthObject *self);
 
 // Utils
 void ForthObject__print(ForthObject *obj);
+bool ForthObject__eq(ForthObject *self, ForthObject *other);
 
 #endif

@@ -155,11 +155,38 @@ void ForthObject__print(ForthObject *obj)
         {
             ForthObject__print(obj->list.data[i]);
             if (i != obj->list.len - 1)
-                printf(", ");
+                printf(" ");
         }
         printf("]");
         break;
     default:
         break;
     }
+}
+
+bool ForthObject__eq(ForthObject *self, ForthObject *other) {
+    if (self->type != other-> type)
+        return false;
+
+    switch (self->type) {
+        case Number:
+            return self->num == other->num;
+        case String:
+        case Symbol:
+            return self->string.len == other->string.len && 
+                memcmp(self->string.chars, other->string.chars, self->string.len) == 0;
+        case List: {
+            if (self->list.len != other->list.len)
+                return false;
+            
+            for (size_t i = 0; i < self->list.len; i++) {
+                if (!ForthObject__eq(self->list.data[i], other->list.data[i]))
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
+    return false;
 }

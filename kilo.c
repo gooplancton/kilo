@@ -55,8 +55,9 @@
 #include <signal.h>
 
 #ifdef PLUGINS_ENABLED
-#include "ForthParser.h"
 #include "ForthBuiltins.h"
+#include <dirent.h>
+#include <sys/stat.h>
 #endif
 
 /* Syntax highlight types */
@@ -141,34 +142,69 @@ static struct editorConfig E;
 #ifdef PLUGINS_ENABLED
 static ForthInterpreter *F;
 
-void kiloGetCursorX(ForthInterpreter *f) {
+ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     ForthObject *cx = ForthObject__new_number((double)E.cx);
     ForthObject__list_push_move(f->stack, cx);
+
+    return Ok;
 }
 
-void kiloSetCursorX(ForthInterpreter *f) {
+ForthEvalResult kiloSetCursorX(ForthInterpreter *f) {
     ForthObject *cx = ForthInterpreter__pop_arg_typed(f, Number);
+    if (!cx)
+        return ArityError;
+
     E.cx = (int)cx->num;
     ForthObject__drop(cx);
+
+    return Ok;
 }
 
-void editorProcessKeypress(int c);
+ForthEvalResult kiloGetCursorY(ForthInterpreter *f) {
+    ForthObject *cy = ForthObject__new_number((double)E.cy);
+    ForthObject__list_push_move(f->stack, cy);
 
-void kiloProcessKey(ForthInterpreter *f) {
+    return Ok;
+}
+
+ForthEvalResult kiloSetCursorY(ForthInterpreter *f) {
+    ForthObject *cy = ForthInterpreter__pop_arg_typed(f, Number);
+    if (!cy)
+        return ArityError;
+
+    E.cy = (int)cy->num;
+    ForthObject__drop(cy);
+
+    return Ok;
+}
+
+void editorProcessKeypress(int c, int trigger_cb);
+
+ForthEvalResult kiloProcessKey(ForthInterpreter *f) {
     ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
-    editorProcessKeypress(key->num);
+    if (!key)
+        return ArityError;
+    // NOTE: non-recursive only for now
+    editorProcessKeypress(key->num, 0);
     ForthObject__drop(key);
+
+    return Ok;
 }
 
-void kiloOnKey(ForthInterpreter *f) {
+ForthEvalResult kiloOnKey(ForthInterpreter *f) {
     ForthObject *obj = ForthInterpreter__pop_arg(f);
     if (obj->type != Symbol && obj->type != List) {
         // type error in plugin (how to best handle this?)
         ForthObject__drop(obj);
-        return;
+        return TypeError;
     }
 
     ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
+    if (!key) {
+        ForthObject__drop(obj);
+        return ArityError;
+    }
+
     int k = (int)key->num;
     ForthObject__drop(key);
 
@@ -180,14 +216,17 @@ void kiloOnKey(ForthInterpreter *f) {
     struct onKeyCallback *newarr = realloc(E.callbacks->onKeyCallbacks,
                                            sizeof(struct onKeyCallback) * newlen);
     if (!newarr) {
+        // out of memory!
         ForthObject__drop(obj);
-        return;
+        return Ok;
     }
     E.callbacks->onKeyCallbacks = newarr;
     E.callbacks->onKeyCallbacksLen = newlen;
 
     E.callbacks->onKeyCallbacks[newlen - 1].key = k;
     E.callbacks->onKeyCallbacks[newlen - 1].cb_obj = obj;
+
+    return Ok;
 }
 
 void initInterpreter(void) {
@@ -196,19 +235,50 @@ void initInterpreter(void) {
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
     ForthInterpreter__register_function(F, "kilo_get_cx", kiloGetCursorX);
     ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
+    ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
+    ForthInterpreter__register_function(F, "kilo_set_cy", kiloSetCursorY);
     ForthInterpreter__register_function(F, "kilo_process_key", kiloProcessKey);
 
-    // TODO: read and execute plugin source files
-    ForthParser parser;
-    parser.offset = 0;
-    parser.string = "['cursor_right [1 kilo_get_cx add kilo_set_cx] define]";
-    ForthObject *o1 = ForthParser__parse_list(&parser);
-    ForthInterpreter__eval(F, o1);
+    char *plugins_dir = getenv("KILO_PLUGINS_DIR");
+    if (!plugins_dir)
+        plugins_dir = "/usr/local/share/kilo/plugins";
 
-    parser.offset = 0;
-    parser.string = "[12 'cursor_right kilo_onkey]";
-    ForthObject *o2 = ForthParser__parse_list(&parser);
-    ForthInterpreter__eval(F, o2);
+    DIR *dir = opendir(plugins_dir);
+    if (!dir) {
+        fprintf(stderr, "Warning: Could not open plugins directory '%s'\n", plugins_dir);
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Check if file has .forth extension
+        char *ext = strrchr(entry->d_name, '.');
+        if (!ext || strcmp(ext, ".forth") != 0) {
+            continue;
+        }
+
+        // Build full path to the plugin file
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", plugins_dir, entry->d_name);
+
+        // Check if it's a regular file
+        struct stat file_stat;
+        if (stat(full_path, &file_stat) != 0 || !S_ISREG(file_stat.st_mode)) {
+            continue;
+        }
+
+        // Execute the plugin file
+        FILE *plugin_file = fopen(full_path, "r");
+        if (plugin_file) {
+            ForthInterpreter__run_file(F, plugin_file);
+            fclose(plugin_file);
+        } else {
+            // TODO: print to stderr
+            fprintf(stderr, "Warning: Could not open plugin file '%s'\n", full_path);
+        }
+    }
+
+    closedir(dir);
 }
 
 ForthObject *editorGetOnKeyCallback(int c) {
@@ -1297,12 +1367,15 @@ void editorMoveCursor(int key) {
 /* Process events arriving from the standard input, which is, the user
  * is typing stuff on the terminal. */
 #define KILO_QUIT_TIMES 3
-void editorProcessKeypress(int c) {
+void editorProcessKeypress(int c, int trigger_cb) {
     /* When the file is modified, requires Ctrl-q to be pressed N times
      * before actually quitting. */
     static int quit_times = KILO_QUIT_TIMES;
 
 #ifdef PLUGINS_ENABLED
+    if (!trigger_cb)
+      goto default_exec;
+
     ForthObject *cb_sym = editorGetOnKeyCallback(c);
     if (cb_sym) {
         switch (cb_sym->type) {
@@ -1314,7 +1387,6 @@ void editorProcessKeypress(int c) {
             if (entry->type == ListClosure)
                 ForthInterpreter__eval(F, entry->obj);
 
-            SymbolsTableEntry__drop(entry);
             break;
         }
         default:
@@ -1324,6 +1396,8 @@ void editorProcessKeypress(int c) {
         return;
     }
 #endif
+
+default_exec:
 
     switch(c) {
     case ENTER:         /* Enter */
@@ -1440,7 +1514,7 @@ int main(int argc, char **argv) {
     while(1) {
         editorRefreshScreen();
         int c = editorReadKey(STDIN_FILENO);
-        editorProcessKeypress(c);
+        editorProcessKeypress(c, 1);
     }
     return 0;
 }

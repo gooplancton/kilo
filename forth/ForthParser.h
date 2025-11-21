@@ -15,4 +15,16 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted);
 ForthObject *ForthParser__parse_number(ForthParser *self);
 ForthObject *ForthParser__parse_list(ForthParser *self);
 
+// Utils
+bool ForthParser__next_list(ForthParser *self);
+
+// Factory
+ForthParser *ForthParser__new(void);
+
+// Reset
+void ForthParser__reset(ForthParser *self, char *string);
+
+// Drop
+void ForthParser__drop(ForthParser *self);
+
 #endif

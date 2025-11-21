@@ -1,5 +1,35 @@
 #include "ForthParser.h"
 
+ForthParser *ForthParser__new(void) {
+    ForthParser *self = malloc(sizeof(*self));
+    self->offset = 0;
+    self->string = NULL;
+
+    return self;
+}
+
+void ForthParser__reset(ForthParser *self, char *string) {
+    self->offset = 0;
+    self->string = string;
+}
+
+void ForthParser__drop(ForthParser *self) {
+    free(self);
+}
+
+bool ForthParser__next_list(ForthParser *self) {
+    if (self->string[self->offset] == '[')
+        return true;
+
+    while (self->string[self->offset + 1]) {
+        self->offset += 1;
+        if (self->string[self->offset] == '[')
+            return true;
+    }
+
+    return false;
+}
+
 ForthObject *ForthParser__parse_string(ForthParser *self)
 {
     char *shifted = self->string + self->offset;
@@ -11,8 +41,10 @@ ForthObject *ForthParser__parse_string(ForthParser *self)
     while (shifted[len + 1] != '"' && shifted[len + 1] != '\0')
         len++;
 
-    if (shifted[len + 1] != '"')
-        return NULL; /* unterminated string */
+    if (shifted[len + 1] != '"') {
+        fprintf(stderr,"ParsingError: Unterminated string near offset %d\n", (int)self->offset);
+        return NULL;
+    }
 
     /* consume opening quote, content and closing quote */
     self->offset += len + 2;
@@ -31,8 +63,10 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted)
     while (isalpha((unsigned char)shifted[len]) || (unsigned char)shifted[len] == '_')
         len++;
 
-    if (len == 0)
-        return NULL; /* nothing parsed */
+    if (!len) {
+        fprintf(stderr,"ParsingError: Empty symbol at offset %d\n", (int)self->offset);
+        return NULL;
+    }
 
     self->offset += len;
 
@@ -49,8 +83,10 @@ ForthObject *ForthParser__parse_number(ForthParser *self)
     double num = strtod(start, &endptr);
 
     /* no characters consumed => parse failure */
-    if (endptr == start)
+    if (endptr == start) {
+        fprintf(stderr,"ParsingError: Empty number at offset %d\n", (int)self->offset);
         return NULL;
+    }
 
     /* update caller's offset to point after the parsed number */
     self->offset = (size_t)(endptr - self->string);
@@ -72,6 +108,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
     {
         switch (self->string[self->offset])
         {
+        case '+':
         case '\t':
         case '\n':
         case ' ':
@@ -88,10 +125,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
             self->offset += 1;
             ForthObject *newObj = ForthParser__parse_symbol(self, true);
             if (newObj == NULL)
-            {
-                printf("Parsing error: Could not parse quoted symbol");
-                exit(1);
-            }
+                return NULL;
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -100,10 +134,8 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_string(self);
             if (newObj == NULL)
-            {
-                printf("Parsing error: Could not parse string");
-                exit(1);
-            }
+                return NULL;
+            
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -112,10 +144,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_list(self);
             if (newObj == NULL)
-            {
-                printf("Parsing error: Could not parse list");
-                exit(1);
-            }
+                return NULL;
 
             ForthObject__list_push_move(obj, newObj);
             self->offset += 1;
@@ -125,10 +154,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         {
             ForthObject *newObj = ForthParser__parse_number(self);
             if (newObj == NULL)
-            {
-                printf("Parsing error: Could not parse number");
-                exit(1);
-            }
+                return NULL;
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -142,10 +168,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
                 newObj = ForthParser__parse_symbol(self, false);
 
             if (newObj == NULL)
-            {
-                printf("Parsing error: Could not parse number/symbol");
-                exit(1);
-            }
+                return NULL;
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -153,6 +176,6 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         }
     }
 
-    // error: unterminated list
+    fprintf(stderr,"ParsingError: Unterminated list near offset: %d\n", (int)self->offset);
     return NULL;
 }
