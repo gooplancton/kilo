@@ -218,7 +218,7 @@ ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr
                     SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
                     if (!entry)
                     {
-                        fprintf(stderr, "UnknownSymbolError: %s", key);
+                        fprintf(stderr, "UnknownSymbolError: %s\n", key);
                         return UnknownSymbolError;
                     }
 
@@ -250,11 +250,11 @@ ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr
                     return ForthInterpreter__eval(self, entry->obj);
                 break;
             } else {
-                fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol");
+                fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol\n");
                 return TypeError;
             }
         default:
-            fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol");
+            fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol\n");
             return TypeError;
     }
 

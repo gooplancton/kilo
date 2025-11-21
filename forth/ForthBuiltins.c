@@ -66,7 +66,7 @@ ForthEvalResult builtin_div(ForthInterpreter *in)
     POP_ARG_TYPED(in, n1, Number)
 
     if (n2->num == 0.0) {
-        fprintf(stderr, "MathError: division by zero");
+        fprintf(stderr, "MathError: division by zero\n");
         ForthObject__drop(n1);
         ForthObject__drop(n2);
 
@@ -88,7 +88,7 @@ ForthEvalResult builtin_mod(ForthInterpreter *in)
     ForthObject *n1 = ForthInterpreter__pop_arg_typed(in, Number);
 
     if (n2->num == 0.0) {
-        fprintf(stderr, "MathError: modulo by zero");
+        fprintf(stderr, "MathError: modulo by zero\n");
         ForthObject__drop(n1);
         ForthObject__drop(n2);
 
@@ -174,7 +174,7 @@ ForthEvalResult builtin_contains(ForthInterpreter *in)
         }
     } else if (haystack->type == String || haystack->type == Symbol) {
         if (needle->type != String) {
-            fprintf(stderr, "TypeError: needle must be a string");
+            fprintf(stderr, "TypeError: needle must be a string\n");
 
             ForthObject__drop(haystack);
             ForthObject__drop(needle);
@@ -198,7 +198,7 @@ ForthEvalResult builtin_contains(ForthInterpreter *in)
         free(haystack_str);
         free(needle_str);
     } else {
-        fprintf(stderr, "TypeError: container must be a string or a list");
+        fprintf(stderr, "TypeError: container must be a string or a list\n");
 
         return TypeError;
     }
@@ -223,7 +223,7 @@ ForthEvalResult builtin_at(ForthInterpreter *in) {
         case String:
         case Symbol: {
             if (idx < 0 || (size_t)idx >= container->string.len) {
-                fprintf(stderr, "IndexError: string index %ld out of bounds (length: %zu)", 
+                fprintf(stderr, "IndexError: string index %ld out of bounds (length: %zu)\n", 
                        idx, container->string.len);
 
                 ForthObject__drop(idx_obj);
@@ -239,7 +239,7 @@ ForthEvalResult builtin_at(ForthInterpreter *in) {
         
         case List: {
             if (idx < 0 || (size_t)idx >= container->list.len) {
-                fprintf(stderr, "IndexError: list index %ld out of bounds (length: %zu)", 
+                fprintf(stderr, "IndexError: list index %ld out of bounds (length: %zu)\n", 
                        idx, container->list.len);
 
                 ForthObject__drop(idx_obj);
@@ -253,7 +253,7 @@ ForthEvalResult builtin_at(ForthInterpreter *in) {
         }
         
         case Number:
-            fprintf(stderr, "TypeError: number is not indexable");
+            fprintf(stderr, "TypeError: number is not indexable\n");
 
             ForthObject__drop(idx_obj);
             ForthObject__drop(container);
@@ -287,8 +287,8 @@ ForthEvalResult builtin_if(ForthInterpreter *in)
 
 ForthEvalResult builtin_ifelse(ForthInterpreter *in)
 {
-    POP_ARG_TYPED(in, true_branch, List)
     POP_ARG_TYPED(in, false_branch, List)
+    POP_ARG_TYPED(in, true_branch, List)
     POP_ARG_TYPED(in, condition, Number)
 
     ForthEvalResult res = Ok;
@@ -315,7 +315,7 @@ ForthEvalResult builtin_while(ForthInterpreter *in)
         ForthInterpreter__eval(in, condition);
         ForthObject *result = ForthInterpreter__pop_arg_typed(in, Number);
         if (!result) {
-            fprintf(stderr, "ArityError: stack underflow in loop execution");
+            fprintf(stderr, "ArityError: stack underflow in loop execution\n");
             ForthObject__drop(condition);
             ForthObject__drop(body);
 
@@ -405,7 +405,7 @@ ForthEvalResult builtin_define(ForthInterpreter *in)
 
     if (!key->string.quoted)
     {
-        fprintf(stderr, "TypeError: unexpected unquoted symbol");
+        fprintf(stderr, "TypeError: unexpected unquoted symbol\n");
         return TypeError;
     }
 

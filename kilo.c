@@ -225,6 +225,7 @@ ForthEvalResult kiloOnKey(ForthInterpreter *f) {
 
     E.callbacks->onKeyCallbacks[newlen - 1].key = k;
     E.callbacks->onKeyCallbacks[newlen - 1].cb_obj = obj;
+    fprintf(stderr, "Info: Registered callback on key: %d\n", k);
 
     return Ok;
 }
@@ -270,7 +271,9 @@ void initInterpreter(void) {
         // Execute the plugin file
         FILE *plugin_file = fopen(full_path, "r");
         if (plugin_file) {
-            ForthInterpreter__run_file(F, plugin_file);
+            fprintf(stderr, "Info: Loading plugin file '%s'\n", full_path);
+            ForthEvalResult res = ForthInterpreter__run_file(F, plugin_file);
+            fprintf(stderr, "Info: Loaded plugin file '%s', exited with %d\n", full_path, res);
             fclose(plugin_file);
         } else {
             // TODO: print to stderr
@@ -1379,13 +1382,21 @@ void editorProcessKeypress(int c, int trigger_cb) {
     ForthObject *cb_sym = editorGetOnKeyCallback(c);
     if (cb_sym) {
         switch (cb_sym->type) {
-        case List: 
-            ForthInterpreter__eval(F, cb_sym);
+        case List: {
+            ForthEvalResult res = ForthInterpreter__eval(F, cb_sym);
+            if (res != Ok)
+                fprintf(stderr, "Warn: nonzero result in callback\n");
+
             break;
+        }
         case Symbol: {
             SymbolsTableEntry *entry = SymbolsTable__get(F->symbols, cb_sym->string.chars);
-            if (entry->type == ListClosure)
-                ForthInterpreter__eval(F, entry->obj);
+            if (entry->type == ListClosure) {
+                ForthEvalResult res = ForthInterpreter__eval(F, entry->obj);
+
+                if (res != Ok)
+                    fprintf(stderr, "Warn: nonzero result in callback\n");
+            }
 
             break;
         }

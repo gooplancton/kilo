@@ -6,41 +6,41 @@ start in normal mode by default
 ['vim_mode 0 define]
 
 i enters insert mode
-['kilo_onkey 105 ['vim_mode 1 define]]
+[105 ['vim_mode 1 define] kilo_onkey]
 
 escape returns to normal mode
-['kilo_onkey 27 ['vim_mode 0 define]]
+[27 ['vim_mode 0 define] kilo_onkey]
 
 Basic movement with hjkl (no repeaters for now)
 
 ['vim_h [
 	vim_is_normal
-	[1000 kilo_process_key] 	move left in normal mode
-	[104 kilo_process_key] 		normal execution in insert mode 
+	[kilo_get_cx 1 sub kilo_set_cx]
+	[104 kilo_process_key]
 	ifelse
 ] define]
-['kilo_onkey 104 'vim_h]
+[104 'vim_h kilo_onkey]
 
 ['vim_j [
 	vim_is_normal
-	[1002 kilo_process_key] 	move right in normal mode
-	[106 kilo_process_key] 		normal execution in insert mode 
+	[kilo_get_cy 1 add kilo_set_cy]
+	[106 kilo_process_key]
 	ifelse
 ] define]
-['kilo_onkey 106 'vim_j]
+[106 'vim_j kilo_onkey]
 
 ['vim_k [
 	vim_is_normal
-	[1003 kilo_process_key] 	move right in normal mode
-	[107 kilo_process_key] 		normal execution in insert mode 
+	[kilo_get_cy 1 sub kilo_set_cy]
+	[107 kilo_process_key] 
 	ifelse
 ] define]
-['kilo_onkey 107 'vim_j]
+[107 'vim_k kilo_onkey]
 
 ['vim_l [
 	vim_is_normal
-	[1001 kilo_process_key] 	move right in normal mode
-	[108 kilo_process_key] 		normal execution in insert mode 
+	[kilo_get_cx 1 add kilo_set_cx]
+	[108 kilo_process_key]
 	ifelse
 ] define]
-['kilo_onkey 108 'vim_l]
+[108 'vim_l kilo_onkey]
