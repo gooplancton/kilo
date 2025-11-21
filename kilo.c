@@ -1507,7 +1507,7 @@ void initEditor(void) {
     signal(SIGWINCH, handleSigWinCh);
 }
 
-void clearScreen() {
+void clearScreen(void) {
     write(STDOUT_FILENO,"\x1b[1;1H\x1b[J",9);
 }
 
