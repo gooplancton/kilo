@@ -5,11 +5,17 @@ vim_mode will be 0 for normal and 1 for insert
 start in normal mode by default
 ['vim_mode 0 define]
 
-i enters insert mode
-[105 ['vim_mode 1 define] kilo_onkey]
+i enters insert mode if the editor is in normal mode
+['vim_i [
+	vim_is_normal
+	['vim_mode 1 define]
+	[105 kilo_process_key]
+	ifelse
+] define]
+[105 'vim_i kilo_onkey]
 
 escape returns to normal mode
-[27 ['vim_mode 0 define] kilo_onkey]
+[27 ['vim_mode 0 define 27 kilo_process_key] kilo_onkey]
 
 Basic movement with hjkl (no repeaters for now)
 
