@@ -2,6 +2,7 @@
 #define FORTH_INTERPRETER_H
 
 #include "ForthParser.h"
+#include <stdarg.h>
 
 #define SYMBOLS_TABLE_DEFAULT_CAPACITY 20
 
@@ -72,8 +73,18 @@ void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, Forth
 void ForthInterpreter__register_closure(ForthInterpreter *self, char *key, ForthObject *closure);
 void ForthInterpreter__register_function(ForthInterpreter *self, char *key, ForthEvalResult (*function)(ForthInterpreter *interpreter));
 
-ForthObject *ForthInterpreter__pop_arg(ForthInterpreter *self);
-ForthObject *ForthInterpreter__pop_arg_typed(ForthInterpreter *self, ForthObjectType type);
+/*
+This function expects a list of n (obj pointer, type) as its variadic arguments
+e.g.:
+    ForhtObject *n1, *arg = NULL;
+    ForthEval args_result = ForthInterpreter__pop__args(in, 2, n1, Number, n2, Any);
+    if (args_result != Ok)
+        return args_result;
+
+If the result of calling this function is anything other than Ok, the function guarantees
+that ALL the objects passed to it are dropped.
+*/
+ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...);
 
 ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr);
 ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text);

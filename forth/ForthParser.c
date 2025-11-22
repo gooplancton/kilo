@@ -1,6 +1,7 @@
 #include "ForthParser.h"
 
-ForthParser *ForthParser__new(void) {
+ForthParser *ForthParser__new(void)
+{
     ForthParser *self = malloc(sizeof(*self));
     self->offset = 0;
     self->string = NULL;
@@ -8,20 +9,24 @@ ForthParser *ForthParser__new(void) {
     return self;
 }
 
-void ForthParser__reset(ForthParser *self, char *string) {
+void ForthParser__reset(ForthParser *self, char *string)
+{
     self->offset = 0;
     self->string = string;
 }
 
-void ForthParser__drop(ForthParser *self) {
+void ForthParser__drop(ForthParser *self)
+{
     free(self);
 }
 
-bool ForthParser__next_list(ForthParser *self) {
+bool ForthParser__next_list(ForthParser *self)
+{
     if (self->string[self->offset] == '[')
         return true;
 
-    while (self->string[self->offset + 1]) {
+    while (self->string[self->offset + 1])
+    {
         self->offset += 1;
         if (self->string[self->offset] == '[')
             return true;
@@ -41,8 +46,9 @@ ForthObject *ForthParser__parse_string(ForthParser *self)
     while (shifted[len + 1] != '"' && shifted[len + 1] != '\0')
         len++;
 
-    if (shifted[len + 1] != '"') {
-        fprintf(stderr,"ParsingError: Unterminated string near offset %d\n", (int)self->offset);
+    if (shifted[len + 1] != '"')
+    {
+        fprintf(stderr, "ParsingError: Unterminated string near offset %d\n", (int)self->offset);
         return NULL;
     }
 
@@ -63,8 +69,9 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self, bool quoted)
     while (isalpha((unsigned char)shifted[len]) || (unsigned char)shifted[len] == '_')
         len++;
 
-    if (!len) {
-        fprintf(stderr,"ParsingError: Empty symbol at offset %d\n", (int)self->offset);
+    if (!len)
+    {
+        fprintf(stderr, "ParsingError: Empty symbol at offset %d\n", (int)self->offset);
         return NULL;
     }
 
@@ -83,8 +90,9 @@ ForthObject *ForthParser__parse_number(ForthParser *self)
     double num = strtod(start, &endptr);
 
     /* no characters consumed => parse failure */
-    if (endptr == start) {
-        fprintf(stderr,"ParsingError: Empty number at offset %d\n", (int)self->offset);
+    if (endptr == start)
+    {
+        fprintf(stderr, "ParsingError: Empty number at offset %d\n", (int)self->offset);
         return NULL;
     }
 
@@ -102,7 +110,7 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
     assert(self->string[self->offset] == '[');
     self->offset += 1;
 
-    ForthObject *obj = ForthObject__new_list();
+    ForthObject *obj = ForthObject__new_list(DEFAULT_LIST_CAP);
 
     while (self->string[self->offset])
     {
@@ -135,7 +143,6 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
             ForthObject *newObj = ForthParser__parse_string(self);
             if (newObj == NULL)
                 return NULL;
-            
 
             ForthObject__list_push_move(obj, newObj);
             break;
@@ -176,6 +183,6 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
         }
     }
 
-    fprintf(stderr,"ParsingError: Unterminated list near offset: %d\n", (int)self->offset);
+    fprintf(stderr, "ParsingError: Unterminated list near offset: %d\n", (int)self->offset);
     return NULL;
 }

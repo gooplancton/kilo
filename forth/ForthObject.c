@@ -1,35 +1,56 @@
 #include "ForthObject.h"
 
-ForthObject *ForthObject__rc_clone(ForthObject *obj)
+ForthObject *ForthObject__rc_clone(ForthObject *self)
 {
-    obj->ref_count += 1;
+    self->ref_count += 1;
 
-    return obj;
+    return self;
 }
 
-void ForthObject__drop(ForthObject *obj)
+ForthObject *ForthObject__deep_clone(ForthObject *self)
 {
-    if (!obj)
-        return;
-    obj->ref_count -= 1;
-    if (obj->ref_count == 0)
+    switch (self->type)
     {
-        switch (obj->type)
+    case Number:
+        return ForthObject__new_number(self->num);
+    case String:
+        return ForthObject__new_string(self->string.chars, self->string.len);
+    case Symbol:
+        return ForthObject__new_symbol(self->string.chars, self->string.len, self->string.quoted);
+    case List:
+    {
+        ForthObject *res = ForthObject__new_list(self->list.len);
+        for (size_t i = 0; i < self->list.len; i++)
+            ForthObject__list_push_move(res, ForthObject__deep_clone(self->list.data[i]));
+
+        return res;
+    }
+    }
+}
+
+void ForthObject__drop(ForthObject *self)
+{
+    if (!self)
+        return;
+    self->ref_count -= 1;
+    if (self->ref_count == 0)
+    {
+        switch (self->type)
         {
         case List:
-            for (size_t i = 0; i < obj->list.len; i++)
-                ForthObject__drop(obj->list.data[i]);
-            free(obj->list.data);
+            for (size_t i = 0; i < self->list.len; i++)
+                ForthObject__drop(self->list.data[i]);
+            free(self->list.data);
             break;
         case String:
         case Symbol:
-            free(obj->string.chars);
+            free(self->string.chars);
             break;
         default:
             break;
         }
 
-        free(obj);
+        free(self);
     }
 }
 
@@ -79,15 +100,15 @@ ForthObject *ForthObject__new_symbol(char *string, size_t len, bool quoted)
     return obj;
 }
 
-ForthObject *ForthObject__new_list(void)
+ForthObject *ForthObject__new_list(size_t cap)
 {
     ForthObject *obj = malloc(sizeof(*obj));
     if (!obj)
         abort();
     obj->type = List;
     obj->list.len = 0;
-    obj->list.cap = DEFAULT_LIST_CAP;
-    obj->list.data = malloc(sizeof(*obj->list.data) * DEFAULT_LIST_CAP);
+    obj->list.cap = cap;
+    obj->list.data = malloc(sizeof(*obj->list.data) * cap);
     if (!obj->list.data)
         abort();
     obj->ref_count = 1;
@@ -164,28 +185,32 @@ void ForthObject__print(ForthObject *obj)
     }
 }
 
-bool ForthObject__eq(ForthObject *self, ForthObject *other) {
-    if (self->type != other-> type)
+bool ForthObject__eq(ForthObject *self, ForthObject *other)
+{
+    if (self->type != other->type)
         return false;
 
-    switch (self->type) {
-        case Number:
-            return self->num == other->num;
-        case String:
-        case Symbol:
-            return self->string.len == other->string.len && 
-                memcmp(self->string.chars, other->string.chars, self->string.len) == 0;
-        case List: {
-            if (self->list.len != other->list.len)
-                return false;
-            
-            for (size_t i = 0; i < self->list.len; i++) {
-                if (!ForthObject__eq(self->list.data[i], other->list.data[i]))
-                    return false;
-            }
+    switch (self->type)
+    {
+    case Number:
+        return self->num == other->num;
+    case String:
+    case Symbol:
+        return self->string.len == other->string.len &&
+               memcmp(self->string.chars, other->string.chars, self->string.len) == 0;
+    case List:
+    {
+        if (self->list.len != other->list.len)
+            return false;
 
-            return true;
+        for (size_t i = 0; i < self->list.len; i++)
+        {
+            if (!ForthObject__eq(self->list.data[i], other->list.data[i]))
+                return false;
         }
+
+        return true;
+    }
     }
 
     return false;
