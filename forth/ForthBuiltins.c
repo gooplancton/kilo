@@ -344,6 +344,24 @@ ForthEvalResult builtin_while(ForthInterpreter *in)
     return res;
 }
 
+ForthEvalResult builtin_times(ForthInterpreter *in)
+{
+    ForthObject *body = NULL, *times = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &body, List, &times, Number);
+    if (args_res != Ok)
+        return args_res;
+
+    double to_num = times->num;
+    ForthObject__drop(times);
+
+    ForthEvalResult res = Ok;
+    for (double _ = 0; _ < to_num; _++)
+        res = ForthInterpreter__eval(in, body);
+
+    ForthObject__drop(body);
+    return res;
+}
+
 // Execution Stack
 ForthEvalResult builtin_pop(ForthInterpreter *in)
 {
@@ -549,6 +567,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "if", builtin_if);
     ForthInterpreter__register_function(in, "ifelse", builtin_ifelse);
     ForthInterpreter__register_function(in, "while", builtin_while);
+    ForthInterpreter__register_function(in, "times", builtin_times);
 
     // Execution Stack
     ForthInterpreter__register_function(in, "pop", builtin_pop);
