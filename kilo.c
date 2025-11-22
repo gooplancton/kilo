@@ -146,13 +146,15 @@ ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     ForthObject *cx = ForthObject__new_number((double)E.cx);
     ForthObject__list_push_move(f->stack, cx);
 
+
     return Ok;
 }
 
 ForthEvalResult kiloSetCursorX(ForthInterpreter *f) {
-    ForthObject *cx = ForthInterpreter__pop_arg_typed(f, Number);
-    if (!cx)
-        return ArityError;
+    ForthObject *cx = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &cx, Number);
+    if (args_res != Ok)
+        return args_res;
 
     E.cx = (int)cx->num;
     ForthObject__drop(cx);
@@ -168,9 +170,10 @@ ForthEvalResult kiloGetCursorY(ForthInterpreter *f) {
 }
 
 ForthEvalResult kiloSetCursorY(ForthInterpreter *f) {
-    ForthObject *cy = ForthInterpreter__pop_arg_typed(f, Number);
-    if (!cy)
-        return ArityError;
+    ForthObject *cy = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &cy, Number);
+    if (args_res != Ok)
+        return args_res;
 
     E.cy = (int)cy->num;
     ForthObject__drop(cy);
@@ -181,29 +184,34 @@ ForthEvalResult kiloSetCursorY(ForthInterpreter *f) {
 void editorProcessKeypress(int c, int trigger_cb);
 
 ForthEvalResult kiloProcessKey(ForthInterpreter *f) {
-    ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
-    if (!key)
-        return ArityError;
-    // NOTE: non-recursive only for now
+    ForthObject *key = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &key, Number);
+    if (args_res != Ok)
+        return args_res;
+
     editorProcessKeypress(key->num, 0);
     ForthObject__drop(key);
 
     return Ok;
 }
 
-ForthEvalResult kiloOnKey(ForthInterpreter *f) {
-    ForthObject *obj = ForthInterpreter__pop_arg(f);
-    if (obj->type != Symbol && obj->type != List) {
-        // type error in plugin (how to best handle this?)
-        ForthObject__drop(obj);
-        return TypeError;
-    }
+ForthEvalResult kiloProcessKeyRecursive(ForthInterpreter *f) {
+    ForthObject *key = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &key, Number);
+    if (args_res != Ok)
+        return args_res;
 
-    ForthObject *key = ForthInterpreter__pop_arg_typed(f, Number);
-    if (!key) {
-        ForthObject__drop(obj);
-        return ArityError;
-    }
+    editorProcessKeypress(key->num, 1);
+    ForthObject__drop(key);
+
+    return Ok;
+}
+
+ForthEvalResult kiloOnKey(ForthInterpreter *f) {
+    ForthObject *obj = NULL, *key = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &obj, Symbol | List, &key, Number);
+    if (args_res != Ok)
+        return args_res;
 
     int k = (int)key->num;
     ForthObject__drop(key);
@@ -239,6 +247,7 @@ void initInterpreter(void) {
     ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
     ForthInterpreter__register_function(F, "kilo_set_cy", kiloSetCursorY);
     ForthInterpreter__register_function(F, "kilo_process_key", kiloProcessKey);
+    ForthInterpreter__register_function(F, "kilo_process_key_rec", kiloProcessKeyRecursive);
 
     char *plugins_dir = getenv("KILO_PLUGINS_DIR");
     if (!plugins_dir)

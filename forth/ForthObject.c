@@ -1,5 +1,54 @@
 #include "ForthObject.h"
 
+void ForthObjectType__format(ForthObjectType self, char *buffer, size_t buf_size)
+{
+    buffer[0] = '\0';
+    bool first = true;
+
+    if (self & Number)
+    {
+        strncat(buffer, "Number", buf_size - strlen(buffer) - 1);
+        first = false;
+    }
+    if (self & String)
+    {
+        if (!first)
+            strncat(buffer, ", ", buf_size - strlen(buffer) - 1);
+        strncat(buffer, "String", buf_size - strlen(buffer) - 1);
+        first = false;
+    }
+    if (self & Symbol)
+    {
+        if (!first)
+            strncat(buffer, ", ", buf_size - strlen(buffer) - 1);
+        strncat(buffer, "Symbol", buf_size - strlen(buffer) - 1);
+        first = false;
+    }
+    if (self & List)
+    {
+        if (!first)
+            strncat(buffer, ", ", buf_size - strlen(buffer) - 1);
+        strncat(buffer, "List", buf_size - strlen(buffer) - 1);
+    }
+}
+
+const char *ForthObjectType__as_str(ForthObjectType self)
+{
+    switch (self)
+    {
+    case Number:
+        return "Number";
+    case String:
+        return "String";
+    case Symbol:
+        return "Symbol";
+    case List:
+        return "List";
+    default:
+        return "Invalid";
+    }
+}
+
 ForthObject *ForthObject__rc_clone(ForthObject *self)
 {
     self->ref_count += 1;

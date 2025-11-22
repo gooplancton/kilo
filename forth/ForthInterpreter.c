@@ -307,8 +307,11 @@ ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...
         }
         if (!(obj->type & types[i]) && !has_found_err)
         {
-            fprintf(stderr, "TypeError: expected argument %zu to be %d, got %d\n",
-                    i, types[i], obj->type);
+            char expected[128];
+            ForthObjectType__format(types[i], expected, sizeof(expected));
+
+            fprintf(stderr, "TypeError: expected argument %zu to be one of (%s), got %s\n",
+                    i, expected, ForthObjectType__as_str(obj->type));
             res = TypeError;
             has_found_err = true;
         }

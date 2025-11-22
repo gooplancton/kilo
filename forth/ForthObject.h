@@ -15,11 +15,14 @@ typedef enum
 {
     Number = 1,
     String = 2,
-    Symbol = 3,
-    List = 4,
+    Symbol = 4,
+    List = 8,
 } ForthObjectType;
 
 # define Any Number | String | Symbol | List
+
+void ForthObjectType__format(ForthObjectType self, char *buffer, size_t buf_size);
+const char *ForthObjectType__as_str(ForthObjectType self);
 
 typedef struct ForthObject
 {
