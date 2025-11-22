@@ -1,6 +1,6 @@
 vim_mode will be 0 for normal and 1 for insert
 [[vim_mode 0 eq] 'vim_is_normal define]
-[[vim_mode 1 eq] 'vim_is_insert define] 
+[[vim_mode 1 eq] 'vim_is_insert define]
 
 start in normal mode by default
 [0 'vim_mode define]
@@ -13,8 +13,8 @@ the motion count starts at 0 but we max it with 1 before motions
 i enters insert mode if the editor is in normal mode
 [[
 	vim_is_normal
-	[1 'vim_mode define]
-	[105 kilo_process_key]
+	["--INSERT--" kilo_set_status_msg 1 'vim_mode define]
+	[kilo_pressed_key kilo_process_key]
 	ifelse
 ] 'vim_i define]
 [105 'vim_i kilo_onkey]
@@ -40,68 +40,20 @@ number handlers for motion count (0-9)
 	ifelse
 ] kilo_onkey]
 
-[49 [
-	vim_is_normal
-	[vim_motion_count 10 mul 1 add 'vim_motion_count define]
-	[49 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[50 [
-	vim_is_normal
-	[vim_motion_count 10 mul 2 add 'vim_motion_count define]
-	[50 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[51 [
-	vim_is_normal
-	[vim_motion_count 10 mul 3 add 'vim_motion_count define]
-	[51 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[52 [
-	vim_is_normal
-	[vim_motion_count 10 mul 4 add 'vim_motion_count define]
-	[52 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[53 [
-	vim_is_normal
-	[vim_motion_count 10 mul 5 add 'vim_motion_count define]
-	[53 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[54 [
-	vim_is_normal
-	[vim_motion_count 10 mul 6 add 'vim_motion_count define]
-	[54 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[55 [
-	vim_is_normal
-	[vim_motion_count 10 mul 7 add 'vim_motion_count define]
-	[55 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[56 [
-	vim_is_normal
-	[vim_motion_count 10 mul 8 add 'vim_motion_count define]
-	[56 kilo_process_key]
-	ifelse
-] kilo_onkey]
-
-[57 [
-	vim_is_normal
-	[vim_motion_count 10 mul 9 add 'vim_motion_count define]
-	[57 kilo_process_key]
-	ifelse
-] kilo_onkey]
+other digits increase the motion count
+[
+	[49 50 51 52 53 54 55 56 57]
+	[
+		[
+			vim_is_normal
+			[vim_motion_count 10 mul 48 kilo_pressed_key sub add 'vim_motion_count define]
+			[kilo_pressed_key kilo_process_key]
+			ifelse
+		]
+		kilo_onkey
+	]
+	foreach
+]
 
 motion handlers
 [[

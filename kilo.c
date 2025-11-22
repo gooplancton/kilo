@@ -150,6 +150,36 @@ ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     return Ok;
 }
 
+ForthEvalResult kiloExit(ForthInterpreter *_) {
+    exit(0);
+
+    return Ok;
+}
+
+void editorSetStatusMessage(const char *fmt, ...);
+ForthEvalResult kiloSetStatusMessage(ForthInterpreter *f) {
+    ForthObject *status_msg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &status_msg, String | Number);
+    if (args_res != Ok)
+        return args_res;
+
+    switch (status_msg->type) {
+    case String:
+      editorSetStatusMessage(status_msg->string.chars);
+      break;
+    case Number:
+      editorSetStatusMessage("%f", status_msg->num);
+      break;
+    default:
+      // unreachable
+      break;
+    }
+
+    ForthObject__drop(status_msg);
+
+    return Ok;
+}
+
 ForthEvalResult kiloSetCursorX(ForthInterpreter *f) {
     ForthObject *cx = NULL;
     ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &cx, Number);
@@ -242,10 +272,12 @@ void initInterpreter(void) {
     F = ForthInterpreter__new();
     ForthInterpreter__load_builtins(F);
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
+    ForthInterpreter__register_function(F, "kilo_exit", kiloExit);
     ForthInterpreter__register_function(F, "kilo_get_cx", kiloGetCursorX);
     ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
     ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
     ForthInterpreter__register_function(F, "kilo_set_cy", kiloSetCursorY);
+    ForthInterpreter__register_function(F, "kilo_set_status_msg", kiloSetStatusMessage);
     ForthInterpreter__register_function(F, "kilo_process_key", kiloProcessKey);
     ForthInterpreter__register_function(F, "kilo_process_key_rec", kiloProcessKeyRecursive);
 
@@ -1385,6 +1417,10 @@ void editorProcessKeypress(int c, int trigger_cb) {
     static int quit_times = KILO_QUIT_TIMES;
 
 #ifdef PLUGINS_ENABLED
+    ForthObject *k = ForthObject__new_number((double)c);
+    ForthInterpreter__register_literal(F, "kilo_pressed_key", k);
+    ForthObject__drop(k);
+
     if (!trigger_cb)
       goto default_exec;
 

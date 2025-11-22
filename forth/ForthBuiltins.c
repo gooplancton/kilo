@@ -275,6 +275,37 @@ ForthEvalResult builtin_at(ForthInterpreter *in)
     return Ok;
 }
 
+ForthEvalResult builtin_foreach(ForthInterpreter *in)
+{
+    ForthObject *body = NULL, *container = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &body, List, &container, List | String | Symbol);
+    if (args_res != Ok)
+        return args_res;
+
+    ForthEvalResult res = Ok;
+    size_t container_len = container->type == List ? container->list.len : container->string.len;
+    for (size_t idx = 0; idx < container_len; idx++)
+    {
+        ForthObject *el;
+        if (container->type == List)
+            el = ForthObject__rc_clone(container->list.data[idx]);
+        else
+        {
+            char single_char[2] = {container->string.chars[idx], '\0'};
+            el = ForthObject__new_string(single_char, 1);
+        }
+
+        ForthObject__list_push_copy(in->stack, el);
+        res = ForthInterpreter__eval(in, body);
+        ForthObject__drop(el);
+    }
+
+    ForthObject__drop(body);
+    ForthObject__drop(container);
+
+    return res;
+}
+
 // Control Flow
 ForthEvalResult builtin_if(ForthInterpreter *in)
 {
@@ -387,6 +418,20 @@ ForthEvalResult builtin_dup(ForthInterpreter *in)
 
     return Ok;
 }
+
+ForthEvalResult builtin_swap(ForthInterpreter *in)
+{
+    ForthObject *el1 = NULL, *el2 = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &el1, Any, &el2, Any);
+    if (args_res != Ok)
+        return args_res;
+
+    ForthObject__list_push_move(in->stack, el1);
+    ForthObject__list_push_move(in->stack, el2);
+
+    return Ok;
+}
+
 
 ForthEvalResult builtin_stack_len(ForthInterpreter *in)
 {
@@ -562,6 +607,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "len", builtin_len);
     ForthInterpreter__register_function(in, "contains", builtin_contains);
     ForthInterpreter__register_function(in, "at", builtin_at);
+    ForthInterpreter__register_function(in, "foreach", builtin_foreach);
 
     // Control Flow
     ForthInterpreter__register_function(in, "if", builtin_if);
@@ -572,6 +618,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     // Execution Stack
     ForthInterpreter__register_function(in, "pop", builtin_pop);
     ForthInterpreter__register_function(in, "dup", builtin_dup);
+    ForthInterpreter__register_function(in, "swap", builtin_swap);
     ForthInterpreter__register_function(in, "stack", builtin_stack);
     ForthInterpreter__register_function(in, "symbols", builtin_symbols);
     ForthInterpreter__register_function(in, "stack_len", builtin_stack_len);

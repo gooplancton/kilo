@@ -30,7 +30,7 @@ ForthEvalResult builtin_lte(ForthInterpreter *in);
 ForthEvalResult builtin_len(ForthInterpreter *in);
 ForthEvalResult builtin_at(ForthInterpreter *in);
 ForthEvalResult builtin_contains(ForthInterpreter *in);
-// ForthEvalResult builtin_foreach(ForthInterpreter *in);
+ForthEvalResult builtin_foreach(ForthInterpreter *in);
 // ForthEvalResult builtin_append(ForthInterpreter *in);
 // ForthEvalResult builtin_truncate(ForthInterpreter *in);
 
@@ -43,6 +43,7 @@ ForthEvalResult builtin_times(ForthInterpreter *in);
 // Context
 ForthEvalResult builtin_pop(ForthInterpreter *in);
 ForthEvalResult builtin_dup(ForthInterpreter *in);
+ForthEvalResult builtin_swap(ForthInterpreter *in);
 ForthEvalResult builtin_stack_len(ForthInterpreter *in);
 ForthEvalResult builtin_stack(ForthInterpreter *in);
 ForthEvalResult builtin_symbols(ForthInterpreter *in);
@@ -59,6 +60,7 @@ ForthEvalResult builtin_unquote(ForthInterpreter *in);
 
 // Define
 ForthEvalResult builtin_define(ForthInterpreter *in);
+ForthEvalResult builtin_undefine(ForthInterpreter *in);
 
 // Initialization
 void ForthInterpreter__load_builtins(ForthInterpreter *in);
