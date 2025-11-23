@@ -217,38 +217,41 @@ ForthObject *ForthInterpreter__resolve_template(ForthInterpreter *self, ForthObj
 {
     assert(template->type == List && template->list.quasiquoted);
     ForthObject *resolved = ForthObject__new_list(template->list.len, false);
-
     for (size_t i = 0; i < template->list.len; i++)
     {
         ForthObject *el = template->list.data[i];
+
+        if (el->type == List && el->list.quasiquoted)
+        {
+            ForthObject *nested_resolved = ForthInterpreter__resolve_template(self, el);
+            ForthObject__list_push_move(resolved, nested_resolved);
+            continue;
+        }
+
         if (el->type != Symbol || el->string.symbol_flag != EagerlyEvaluated)
         {
             ForthObject__list_push_copy(resolved, el);
             continue;
         }
-
         SymbolsTableEntry *evaluated = SymbolsTable__get(self->symbols, el->string.chars);
         if (!evaluated)
         {
             fprintf(stderr, "UnknownSymbolError: %s\n", el->string.chars);
             continue;
         }
-
         switch (evaluated->type)
         {
         case ObjLiteral:
             ForthObject__list_push_copy(resolved, evaluated->obj);
             break;
         case Function:
-            exit(101);
         case ListClosure:
-            exit(102);
+            ForthObject__list_push_copy(resolved, el);
+            break;
         default:
-            // TODO:
             exit((int)evaluated->type);
         }
     }
-
     return resolved;
 }
 

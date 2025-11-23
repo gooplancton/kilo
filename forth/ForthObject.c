@@ -209,18 +209,13 @@ void ForthObject__fprint(FILE *file, ForthObject *obj)
     switch (obj->type)
     {
     case Symbol:
-        switch (obj->string.symbol_flag)
-        {
-        case Unquoted:
-            fprintf(file, "%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        case Quoted:
-            fprintf(file, "'%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        case EagerlyEvaluated:
-            fprintf(file, ",%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        }
+        if (obj->string.symbol_flag == Unquoted)
+            fprintf(file, "'");
+        else if (obj->string.symbol_flag == EagerlyEvaluated)
+            fprintf(file, ",");
+
+        fprintf(file, "%.*s", (int)obj->string.len, obj->string.chars);
+        break;
     case String:
         fprintf(file, "\"%.*s\"", (int)obj->string.len, obj->string.chars);
         break;
@@ -242,7 +237,8 @@ void ForthObject__fprint(FILE *file, ForthObject *obj)
     }
 }
 
-inline void ForthObject__print(ForthObject *obj) {
+inline void ForthObject__print(ForthObject *obj)
+{
     ForthObject__fprint(stdout, obj);
 }
 

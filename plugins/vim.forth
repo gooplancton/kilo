@@ -43,11 +43,11 @@ number handlers for motion count (0-9)
 other digits increase the motion count
 [
 	[49 50 51 52 53 54 55 56 57]
-	[
-		[
+	[dup '_key define
+		$[
 			vim_is_normal
-			[vim_motion_count 10 mul 48 kilo_pressed_key sub add 'vim_motion_count define]
-			[kilo_pressed_key kilo_process_key]
+			$[vim_motion_count 10 mul 48 ,_key sub add 'vim_motion_count define]
+			$[,_key kilo_process_key]
 			ifelse
 		]
 		kilo_onkey
