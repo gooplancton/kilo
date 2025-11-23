@@ -14,7 +14,7 @@ typedef enum SymbolsTableEntryType
 } SymbolsTableEntryType;
 
 typedef enum ForthEvalResult {
-    Ok,
+    Ok = 0,
     ArityError,
     TypeError,
     MathError,

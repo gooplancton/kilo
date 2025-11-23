@@ -81,16 +81,10 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self)
     if (*starting_char == '\0')
         return NULL;
 
-    ForthSymbolFlag symbol_flag = Unquoted;
-    if (*starting_char == ',')
+    bool quoted = false;
+    if (*starting_char == '\'')
     {
-        symbol_flag = EagerlyEvaluated;
-        self->offset += 1; // comma
-        starting_char += 1;
-    }
-    else if (*starting_char == '\'')
-    {
-        symbol_flag = Quoted;
+        quoted = true;
         self->offset += 1; // tick
         starting_char += 1;
     }
@@ -115,7 +109,7 @@ ForthObject *ForthParser__parse_symbol(ForthParser *self)
         return NULL;
     }
 
-    return ForthObject__new_symbol(starting_char, len, symbol_flag);
+    return ForthObject__new_symbol(starting_char, len, quoted);
 }
 
 ForthObject *ForthParser__parse_number(ForthParser *self)
@@ -140,25 +134,22 @@ ForthObject *ForthParser__parse_number(ForthParser *self)
     return ForthObject__new_number(num);
 }
 
-ForthObject *ForthParser__parse_list(ForthParser *self)
+ForthObject *ForthParser__next_object(ForthParser *self)
 {
     if (self->string == NULL)
         return NULL;
 
-    bool quasiquoted = false;
+}
+
+ForthObject *ForthParser__parse_list(ForthParser *self)
+{
     char *starting_char = ForthParser__char(self);
-    if (*starting_char == '$')
-    {
-        quasiquoted = true;
-        self->offset += 1; // dollar sign
-        starting_char += 1;
-    }
 
     assert(*starting_char == '[');
 
     self->offset += 1; // opening bracket
 
-    ForthObject *obj = ForthObject__new_list(DEFAULT_LIST_CAP, quasiquoted);
+    ForthObject *obj = ForthObject__new_list(DEFAULT_LIST_CAP);
 
     while (self->string[self->offset])
     {

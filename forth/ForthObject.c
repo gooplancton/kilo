@@ -65,10 +65,10 @@ ForthObject *ForthObject__deep_clone(ForthObject *self)
     case String:
         return ForthObject__new_string(self->string.chars, self->string.len);
     case Symbol:
-        return ForthObject__new_symbol(self->string.chars, self->string.len, self->string.symbol_flag);
+        return ForthObject__new_symbol(self->string.chars, self->string.len, self->string.quoted);
     case List:
     {
-        ForthObject *res = ForthObject__new_list(self->list.len, self->list.quasiquoted);
+        ForthObject *res = ForthObject__new_list(self->list.len);
         for (size_t i = 0; i < self->list.len; i++)
             ForthObject__list_push_move(res, ForthObject__deep_clone(self->list.data[i]));
 
@@ -124,14 +124,14 @@ ForthObject *ForthObject__new_string(char *string, size_t len)
         abort();
     memcpy(obj->string.chars, string, len);
     obj->string.chars[len] = '\0';
-    obj->string.symbol_flag = Unquoted;
+    obj->string.quoted = false;
     obj->string.len = len;
     obj->ref_count = 1;
 
     return obj;
 }
 
-ForthObject *ForthObject__new_symbol(char *string, size_t len, ForthSymbolFlag symbol_flag)
+ForthObject *ForthObject__new_symbol(char *string, size_t len, bool quoted)
 {
     ForthObject *obj = malloc(sizeof(*obj));
     if (!obj)
@@ -143,13 +143,13 @@ ForthObject *ForthObject__new_symbol(char *string, size_t len, ForthSymbolFlag s
     memcpy(obj->string.chars, string, len);
     obj->string.chars[len] = '\0';
     obj->string.len = len;
-    obj->string.symbol_flag = symbol_flag;
+    obj->string.quoted = quoted;
     obj->ref_count = 1;
 
     return obj;
 }
 
-ForthObject *ForthObject__new_list(size_t cap, bool quasiquoted)
+ForthObject *ForthObject__new_list(size_t cap)
 {
     ForthObject *obj = malloc(sizeof(*obj));
     if (!obj)
@@ -161,7 +161,6 @@ ForthObject *ForthObject__new_list(size_t cap, bool quasiquoted)
     if (!obj->list.data)
         abort();
     obj->ref_count = 1;
-    obj->list.quasiquoted = quasiquoted;
 
     return obj;
 }
@@ -209,18 +208,13 @@ void ForthObject__fprint(FILE *file, ForthObject *obj)
     switch (obj->type)
     {
     case Symbol:
-        switch (obj->string.symbol_flag)
-        {
-        case Unquoted:
-            fprintf(file, "%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        case Quoted:
-            fprintf(file, "'%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        case EagerlyEvaluated:
-            fprintf(file, ",%.*s", (int)obj->string.len, obj->string.chars);
-            break;
-        }
+    {
+        if (obj->string.quoted)
+            fprintf(file, "'");
+
+        fprintf(file, "%.*s", (int)obj->string.len, obj->string.chars);
+        break;
+    }
     case String:
         fprintf(file, "\"%.*s\"", (int)obj->string.len, obj->string.chars);
         break;
@@ -242,7 +236,8 @@ void ForthObject__fprint(FILE *file, ForthObject *obj)
     }
 }
 
-inline void ForthObject__print(ForthObject *obj) {
+inline void ForthObject__print(ForthObject *obj)
+{
     ForthObject__fprint(stdout, obj);
 }
 
