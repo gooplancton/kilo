@@ -19,7 +19,14 @@ typedef enum
     List = 8,
 } ForthObjectType;
 
-# define Any Number | String | Symbol | List
+#define Any Number | String | Symbol | List
+
+typedef enum
+{
+    Unquoted,
+    Quoted,
+    EagerlyEvaluated,
+} ForthSymbolFlag;
 
 void ForthObjectType__format(ForthObjectType self, char *buffer, size_t buf_size);
 const char *ForthObjectType__as_str(ForthObjectType self);
@@ -34,13 +41,14 @@ typedef struct ForthObject
         struct
         {
             size_t len;
-            bool quoted;
+            ForthSymbolFlag symbol_flag;
             char *chars;
         } string;
         struct
         {
-            size_t len;
             size_t cap;
+            size_t len;
+            bool quasiquoted;
             struct ForthObject **data;
         } list;
     };
@@ -54,8 +62,8 @@ void ForthObject__drop(ForthObject *obj);
 // Factories
 ForthObject *ForthObject__new_number(double num);
 ForthObject *ForthObject__new_string(char *string, size_t len);
-ForthObject *ForthObject__new_symbol(char *string, size_t len, bool quoted);
-ForthObject *ForthObject__new_list(size_t cap);
+ForthObject *ForthObject__new_symbol(char *string, size_t len, ForthSymbolFlag symbol_flag);
+ForthObject *ForthObject__new_list(size_t cap, bool quasiquoted);
 
 // List push/pop
 void ForthObject__list_push_copy(ForthObject *self, ForthObject *obj);
@@ -63,6 +71,7 @@ void ForthObject__list_push_move(ForthObject *self, ForthObject *obj);
 ForthObject *ForthObject__list_pop(ForthObject *self);
 
 // Utils
+void ForthObject__fprint(FILE* fd, ForthObject *obj);
 void ForthObject__print(ForthObject *obj);
 bool ForthObject__eq(ForthObject *self, ForthObject *other);
 

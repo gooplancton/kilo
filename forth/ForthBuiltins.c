@@ -451,7 +451,7 @@ ForthEvalResult builtin_stack(ForthInterpreter *in)
 
 ForthEvalResult builtin_symbols(ForthInterpreter *in)
 {
-    ForthObject *res = ForthObject__new_list(in->symbols->len);
+    ForthObject *res = ForthObject__new_list(in->symbols->len, false);
     for (size_t i = 0; i < in->symbols->len; i++)
     {
         size_t keylen = strlen(in->symbols->entries[i]->key);

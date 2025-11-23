@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     size_t len = 0;
     size_t read;
 
-    while (printf("> ") && (read = getline(&line, &len, stdin)) != -1)
+    while (printf("> ") && (int)(read = getline(&line, &len, stdin)) != -1)
     {
         // Remove trailing newline
         if (read > 0 && line[read - 1] == '\n') {

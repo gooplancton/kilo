@@ -180,7 +180,7 @@ void SymbolsTable__remove(SymbolsTable *self, char *key)
 ForthInterpreter *ForthInterpreter__new(void)
 {
     ForthInterpreter *self = malloc(sizeof(*self));
-    self->stack = ForthObject__new_list(DEFAULT_LIST_CAP);
+    self->stack = ForthObject__new_list(DEFAULT_LIST_CAP, false);
     self->symbols = SymbolsTable__new();
     self->parser = ForthParser__new();
 
@@ -196,7 +196,7 @@ void ForthInterpreter__drop(ForthInterpreter *self)
 
 void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, ForthObject *literal)
 {
-    assert(literal->type != Symbol || (literal->type == Symbol && literal->string.quoted));
+    assert(literal->type != Symbol || (literal->type == Symbol && literal->string.symbol_flag == Quoted));
 
     SymbolsTable__add_literal(self->symbols, key, literal);
 }
@@ -213,22 +213,75 @@ void ForthInterpreter__register_function(ForthInterpreter *self, char *key, Fort
     SymbolsTable__add_function(self->symbols, key, function);
 }
 
+ForthObject *ForthInterpreter__resolve_template(ForthInterpreter *self, ForthObject *template)
+{
+    assert(template->type == List && template->list.quasiquoted);
+    ForthObject *resolved = ForthObject__new_list(template->list.len, false);
+
+    for (size_t i = 0; i < template->list.len; i++)
+    {
+        ForthObject *el = template->list.data[i];
+        if (el->type != Symbol || el->string.symbol_flag != EagerlyEvaluated)
+        {
+            ForthObject__list_push_copy(resolved, el);
+            continue;
+        }
+
+        SymbolsTableEntry *evaluated = SymbolsTable__get(self->symbols, el->string.chars);
+        if (!evaluated)
+        {
+            fprintf(stderr, "UnknownSymbolError: %s\n", el->string.chars);
+            continue;
+        }
+
+        switch (evaluated->type)
+        {
+        case ObjLiteral:
+            ForthObject__list_push_copy(resolved, evaluated->obj);
+            break;
+        case Function:
+            exit(101);
+        case ListClosure:
+            exit(102);
+        default:
+            // TODO:
+            exit((int)evaluated->type);
+        }
+    }
+
+    return resolved;
+}
+
 ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr)
 {
+    ForthEvalResult res = Ok;
+
     switch (expr->type)
     {
     case List:
     {
+        if (expr->list.quasiquoted)
+        {
+            ForthObject *resolved = ForthInterpreter__resolve_template(self, expr);
+            res = ForthInterpreter__eval(self, resolved);
+
+            ForthObject__drop(resolved);
+
+            break;
+        }
+
         for (size_t i = 0; i < expr->list.len; i++)
         {
-            if (expr->list.data[i]->type == Symbol && !expr->list.data[i]->string.quoted)
+            ForthObject *obj = expr->list.data[i];
+            if (obj->type == Symbol && obj->string.symbol_flag != Quoted)
             {
                 char *key = expr->list.data[i]->string.chars;
                 SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
                 if (!entry)
                 {
                     fprintf(stderr, "UnknownSymbolError: %s\n", key);
-                    return UnknownSymbolError;
+                    res = UnknownSymbolError;
+                    break;
                 }
 
                 switch (entry->type)
@@ -237,40 +290,45 @@ ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr
                     ForthObject__list_push_copy(self->stack, entry->obj);
                     break;
                 case Function:
-                    entry->function(self);
+                    res = entry->function(self);
                     break;
                 case ListClosure:
-                    ForthInterpreter__eval(self, entry->obj);
+                    res = ForthInterpreter__eval(self, entry->obj);
                     break;
                 }
             }
-            else
+            else if (obj->type == List && obj->list.quasiquoted)
             {
-                ForthObject__list_push_copy(self->stack, expr->list.data[i]);
+                ForthObject *evaluated = ForthInterpreter__resolve_template(self, obj);
+                ForthObject__list_push_copy(self->stack, evaluated);
             }
+            else
+                ForthObject__list_push_copy(self->stack, obj);
         }
 
         break;
     }
     case Symbol:
-        if (expr->string.quoted)
-        {
-            SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, expr->string.chars);
-            if (entry->type == ListClosure)
-                return ForthInterpreter__eval(self, entry->obj);
-            break;
-        }
-        else
-        {
-            fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol\n");
-            return TypeError;
-        }
+    {
+        SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, expr->string.chars);
+        if (entry->type == ListClosure)
+            res = ForthInterpreter__eval(self, entry->obj);
+
+        break;
+    }
     default:
         fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol\n");
-        return TypeError;
+        res = TypeError;
     }
 
-    return Ok;
+    if (res != Ok)
+    {
+        fprintf(stderr, "   while evaluating ");
+        ForthObject__fprint(stderr, expr);
+        fprintf(stderr, "\n");
+    }
+
+    return res;
 }
 
 ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...)
