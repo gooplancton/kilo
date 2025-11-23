@@ -209,7 +209,7 @@ void ForthObject__fprint(FILE *file, ForthObject *obj)
     switch (obj->type)
     {
     case Symbol:
-        if (obj->string.symbol_flag == Unquoted)
+        if (obj->string.symbol_flag == Quoted)
             fprintf(file, "'");
         else if (obj->string.symbol_flag == EagerlyEvaluated)
             fprintf(file, ",");

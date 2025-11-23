@@ -50,7 +50,7 @@ other digits increase the motion count
 			$[,_key kilo_process_key]
 			ifelse
 		]
-		kilo_onkey
+		'_key undefine kilo_onkey
 	]
 	foreach
 ]
@@ -84,3 +84,46 @@ motion handlers
 	ifelse
 ] 'vim_l define]
 [108 'vim_l kilo_onkey]
+
+# w motion - move to start of next word
+[[
+  kilo_get_cy kilo_get_row 'row define
+  
+  [row kilo_get_cx at " " eq not]
+  [1001 kilo_process_key]
+  while
+  
+  [row kilo_get_cx at " " eq]
+  [1001 kilo_process_key]
+  while
+] 'vim_w_single define]
+
+[[
+  vim_is_normal
+  [vim_get_motion_count [vim_w_single] times vim_reset_motion_count]
+  [119 kilo_process_key]
+  ifelse
+] 'vim_w define]
+[119 'vim_w kilo_onkey]
+
+# b motion - move to start of previous word
+[[
+  kilo_get_cy kilo_get_row 'row define
+  
+  [row kilo_get_cx at " " eq not]
+  [1000 kilo_process_key]
+  while
+  
+  [row kilo_get_cx at " " eq]
+  [1000 kilo_process_key]
+  while
+  
+] 'vim_b_single define]
+
+[[
+  vim_is_normal
+  [vim_get_motion_count [vim_b_single] times vim_reset_motion_count]
+  [98 kilo_process_key]
+  ifelse
+] 'vim_b define]
+[98 'vim_b kilo_onkey]

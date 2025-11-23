@@ -33,6 +33,7 @@
  */
 
 #define KILO_VERSION "0.0.1"
+#define PLUGINS_ENABLED 1
 
 #ifdef __linux__
 #define _POSIX_C_SOURCE 200809L
@@ -142,10 +143,28 @@ static struct editorConfig E;
 #ifdef PLUGINS_ENABLED
 static ForthInterpreter *F;
 
+ForthEvalResult kiloGetRow(ForthInterpreter *f) {
+    ForthObject *idx_arg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &idx_arg, Number);
+    if (args_res != Ok)
+        return args_res;
+
+    int idx = (int)idx_arg->num;
+    ForthObject__drop(idx_arg);
+
+    if (idx >= E.numrows)
+        return IndexError;
+
+    erow *row = E.row + idx;
+    ForthObject *res = ForthObject__new_string(row->chars, row->size);
+    ForthObject__list_push_move(f->stack, res);
+
+    return Ok;
+}
+
 ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     ForthObject *cx = ForthObject__new_number((double)E.cx);
     ForthObject__list_push_move(f->stack, cx);
-
 
     return Ok;
 }
@@ -273,6 +292,7 @@ void initInterpreter(void) {
     ForthInterpreter__load_builtins(F);
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
     ForthInterpreter__register_function(F, "kilo_exit", kiloExit);
+    ForthInterpreter__register_function(F, "kilo_get_row", kiloGetRow);
     ForthInterpreter__register_function(F, "kilo_get_cx", kiloGetCursorX);
     ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
     ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
