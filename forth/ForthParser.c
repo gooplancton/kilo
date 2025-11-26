@@ -20,24 +20,6 @@ void ForthParser__drop(ForthParser *self)
     free(self);
 }
 
-// ForthObject *ForthParser__next_object(ForthParser *self)
-bool ForthParser__next_list(ForthParser *self)
-{
-    char *current_char = ForthParser__char(self);
-    if (*current_char == '[' || *current_char == '$')
-        return true;
-
-    while (self->string[self->offset + 1])
-    {
-        self->offset += 1;
-        char *current_char = ForthParser__char(self);
-        if (*current_char == '[' || *current_char == '$')
-            return true;
-    }
-
-    return false;
-}
-
 inline char *ForthParser__char(ForthParser *self)
 {
     return self->string + self->offset;
@@ -160,10 +142,39 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
 
     ForthObject *obj = ForthObject__new_list(DEFAULT_LIST_CAP, quasiquoted);
 
+    while (true)
+    {
+        ForthObject *el = ForthParser__parse_object(self);
+        if (!el) {
+            if (self->string[self->offset] == ']') {
+                self->offset += 1;
+                return obj;
+            } else 
+                goto parse_fail;
+        }
+
+        ForthObject__list_push_copy(obj, el);
+    }
+
+
+parse_fail:
+    ForthObject__drop(obj);
+
+    return NULL;
+}
+
+ForthObject *ForthParser__parse_object(ForthParser *self) {
     while (self->string[self->offset])
     {
         switch (self->string[self->offset])
         {
+        case '#':
+        {
+            while (self->string[self->offset] && self->string[self->offset] != '\n')
+                self->offset += 1;
+
+            break;
+        }
         case '+':
         case '\t':
         case '\n':
@@ -173,68 +184,23 @@ ForthObject *ForthParser__parse_list(ForthParser *self)
             break;
         }
         case ']':
-        {
-            self->offset += 1;
-            return obj;
-        }
+            return NULL;
         case '\'':
-        {
-            ForthObject *newObj = ForthParser__parse_symbol(self);
-            if (newObj == NULL)
-                goto parse_fail;
-
-            ForthObject__list_push_move(obj, newObj);
-            break;
-        }
+            return ForthParser__parse_symbol(self);
         case '"':
-        {
-            ForthObject *newObj = ForthParser__parse_string(self);
-            if (newObj == NULL)
-                goto parse_fail;
-
-            ForthObject__list_push_move(obj, newObj);
-            break;
-        }
+            return ForthParser__parse_string(self);
         case '$':
         case '[':
-        {
-            ForthObject *newObj = ForthParser__parse_list(self);
-            if (newObj == NULL)
-                goto parse_fail;
-
-            ForthObject__list_push_move(obj, newObj);
-            break;
-        }
+            return ForthParser__parse_list(self);
         case '-':
-        {
-            ForthObject *newObj = ForthParser__parse_number(self);
-            if (newObj == NULL)
-                goto parse_fail;
-
-            ForthObject__list_push_move(obj, newObj);
-            break;
-        }
+            return ForthParser__parse_number(self);
         default:
-        {
-            ForthObject *newObj;
             if (isdigit(*ForthParser__char(self)))
-                newObj = ForthParser__parse_number(self);
+                return ForthParser__parse_number(self);
             else
-                newObj = ForthParser__parse_symbol(self);
-
-            if (newObj == NULL)
-                goto parse_fail;
-
-            ForthObject__list_push_move(obj, newObj);
-            break;
-        }
+                return ForthParser__parse_symbol(self);
         }
     }
-
-    fprintf(stderr, "ParsingError: Unterminated list near offset: %d\n", (int)self->offset);
-
-parse_fail:
-    ForthObject__drop(obj);
 
     return NULL;
 }

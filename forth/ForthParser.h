@@ -14,10 +14,10 @@ ForthObject *ForthParser__parse_string(ForthParser *self);
 ForthObject *ForthParser__parse_symbol(ForthParser *self);
 ForthObject *ForthParser__parse_number(ForthParser *self);
 ForthObject *ForthParser__parse_list(ForthParser *self);
+ForthObject *ForthParser__parse_object(ForthParser *self);
 
 // Utils
 char *ForthParser__char(ForthParser *self);
-bool ForthParser__next_list(ForthParser *self);
 
 // Factory
 ForthParser *ForthParser__new(void);

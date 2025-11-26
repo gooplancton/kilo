@@ -106,7 +106,7 @@ typedef struct hlcolor {
 //       [17 'cursor_down kilo_onkey]
 struct onKeyCallback {
     int key;                /* Key that triggerst eh callback */
-    ForthObject *cb_obj;    /* Either a symbol that resolves to a closure OR a list (anonymous cb) */
+    ForthObject *cb_obj;    /* List or Symbol */
 };
 
 // TODO: other types of callback (e.g. onStartup, onTimeout, onExit, etc...)
@@ -169,10 +169,13 @@ ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     return Ok;
 }
 
-ForthEvalResult kiloExit(ForthInterpreter *_) {
-    exit(0);
+ForthEvalResult kiloExit(ForthInterpreter *f) {
+    ForthObject *status_arg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &status_arg, Any);
+    if (args_res != Ok || status_arg->type != Number)
+        exit(0);
 
-    return Ok;
+    exit((int)status_arg->num);
 }
 
 void editorSetStatusMessage(const char *fmt, ...);
@@ -1438,36 +1441,19 @@ void editorProcessKeypress(int c, int trigger_cb) {
 
 #ifdef PLUGINS_ENABLED
     ForthObject *k = ForthObject__new_number((double)c);
-    ForthInterpreter__register_literal(F, "kilo_pressed_key", k);
+    ForthInterpreter__register_object(F, "kilo_pressed_key", k);
     ForthObject__drop(k);
 
     if (!trigger_cb)
       goto default_exec;
 
-    ForthObject *cb_sym = editorGetOnKeyCallback(c);
-    if (cb_sym) {
-        switch (cb_sym->type) {
-        case List: {
-            ForthEvalResult res = ForthInterpreter__eval(F, cb_sym);
-            if (res != Ok)
-                fprintf(stderr, "Warn: nonzero result in callback\n");
-
-            break;
-        }
-        case Symbol: {
-            SymbolsTableEntry *entry = SymbolsTable__get(F->symbols, cb_sym->string.chars);
-            if (entry->type == ListClosure) {
-                ForthEvalResult res = ForthInterpreter__eval(F, entry->obj);
-
-                if (res != Ok)
-                    fprintf(stderr, "Warn: nonzero result in callback\n");
-            }
-
-            break;
-        }
-        default:
-            break;
-        }
+    ForthObject *cb_obj = editorGetOnKeyCallback(c);
+    if (cb_obj) {
+        ForthObject__fprint(cb_obj, stderr);
+        ForthEvalResult res = ForthInterpreter__eval_every(F, cb_obj);;
+        
+        if (res != Ok)
+            fprintf(stderr, "Warn: nonzero result in callback\n");
 
         return;
     }

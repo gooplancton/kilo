@@ -74,6 +74,8 @@ ForthObject *ForthObject__deep_clone(ForthObject *self)
 
         return res;
     }
+    default:
+        return NULL;
     }
 }
 

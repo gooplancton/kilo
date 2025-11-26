@@ -2,7 +2,7 @@
 #include "ForthObject.h"
 #include "ForthParser.h"
 
-SymbolsTableEntry *SymbolsTableEntry__new_object(char *key, ForthObject *obj, SymbolsTableEntryType type)
+SymbolsTableEntry *SymbolsTableEntry__new_object(char *key, ForthObject *obj)
 {
     size_t key_len = strlen(key) + 1;
     size_t alloc_size = sizeof(SymbolsTableEntry) + key_len;
@@ -11,21 +11,11 @@ SymbolsTableEntry *SymbolsTableEntry__new_object(char *key, ForthObject *obj, Sy
     if (!self)
         abort();
 
-    self->type = type;
+    self->type = Object;
     self->obj = ForthObject__rc_clone(obj);
     memcpy(self->key, key, key_len);
 
     return self;
-}
-
-SymbolsTableEntry *SymbolsTableEntry__new_literal(char *key, ForthObject *obj)
-{
-    return SymbolsTableEntry__new_object(key, obj, ObjLiteral);
-}
-
-SymbolsTableEntry *SymbolsTableEntry__new_closure(char *key, ForthObject *obj)
-{
-    return SymbolsTableEntry__new_object(key, obj, ListClosure);
 }
 
 SymbolsTableEntry *SymbolsTableEntry__new_function(char *key, ForthEvalResult (*function)(ForthInterpreter *interpreter))
@@ -46,16 +36,9 @@ SymbolsTableEntry *SymbolsTableEntry__new_function(char *key, ForthEvalResult (*
 
 void SymbolsTableEntry__drop(SymbolsTableEntry *self)
 {
-    switch (self->type)
-    {
-    case ListClosure:
-    case ObjLiteral:
+    if (self->type == Object)
         ForthObject__drop(self->obj);
-        break;
-    case Function:
-        // Function pointers don't need to be freed
-        break;
-    }
+
     free(self);
 }
 
@@ -94,32 +77,22 @@ void SymbolsTable__reserve_slot(SymbolsTable *self)
     }
 }
 
-void SymbolsTable__add_object(SymbolsTable *self, char *key, ForthObject *obj, SymbolsTableEntryType type)
+void SymbolsTable__add_object(SymbolsTable *self, char *key, ForthObject *obj)
 {
     SymbolsTableEntry *existing_entry = SymbolsTable__get(self, key);
     if (existing_entry)
     {
         if (existing_entry->type != Function)
             ForthObject__drop(existing_entry->obj);
-        existing_entry->type = type;
+        existing_entry->type = Object;
         existing_entry->obj = ForthObject__rc_clone(obj);
         return;
     }
 
     SymbolsTable__reserve_slot(self);
 
-    self->entries[self->len] = SymbolsTableEntry__new_object(key, obj, type);
+    self->entries[self->len] = SymbolsTableEntry__new_object(key, obj);
     self->len += 1;
-}
-
-void SymbolsTable__add_literal(SymbolsTable *self, char *key, ForthObject *literal)
-{
-    SymbolsTable__add_object(self, key, literal, ObjLiteral);
-}
-
-void SymbolsTable__add_closure(SymbolsTable *self, char *key, ForthObject *closure)
-{
-    SymbolsTable__add_object(self, key, closure, ListClosure);
 }
 
 void SymbolsTable__add_function(SymbolsTable *self, char *key, ForthEvalResult (*function)(ForthInterpreter *interpreter))
@@ -194,18 +167,9 @@ void ForthInterpreter__drop(ForthInterpreter *self)
     free(self);
 }
 
-void ForthInterpreter__register_literal(ForthInterpreter *self, char *key, ForthObject *literal)
+void ForthInterpreter__register_object(ForthInterpreter *self, char *key, ForthObject *obj)
 {
-    assert(literal->type != Symbol || (literal->type == Symbol && literal->string.symbol_flag == Quoted));
-
-    SymbolsTable__add_literal(self->symbols, key, literal);
-}
-
-void ForthInterpreter__register_closure(ForthInterpreter *self, char *key, ForthObject *closure)
-{
-    assert(closure->type == List);
-
-    SymbolsTable__add_closure(self->symbols, key, closure);
+    SymbolsTable__add_object(self->symbols, key, obj);
 }
 
 void ForthInterpreter__register_function(ForthInterpreter *self, char *key, ForthEvalResult (*function)(ForthInterpreter *interpreter))
@@ -239,18 +203,19 @@ ForthObject *ForthInterpreter__resolve_template(ForthInterpreter *self, ForthObj
             fprintf(stderr, "UnknownSymbolError: %s\n", el->string.chars);
             continue;
         }
-        switch (evaluated->type)
+
+        if (evaluated->type == Object)
         {
-        case ObjLiteral:
+            // if (el->obj->type == List)
+            //     ForthObject__list_push_copy(resolved, el);
+            // else
             ForthObject__list_push_copy(resolved, evaluated->obj);
-            break;
-        case Function:
-        case ListClosure:
-            ForthObject__list_push_copy(resolved, el);
-            break;
-        default:
-            exit((int)evaluated->type);
         }
+        else
+        {
+            evaluated->function(self);
+        }
+
     }
     return resolved;
 }
@@ -269,60 +234,67 @@ ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr
             res = ForthInterpreter__eval(self, resolved);
 
             ForthObject__drop(resolved);
-
-            break;
         }
-
-        for (size_t i = 0; i < expr->list.len; i++)
-        {
-            ForthObject *obj = expr->list.data[i];
-            if (obj->type == Symbol && obj->string.symbol_flag != Quoted)
-            {
-                char *key = expr->list.data[i]->string.chars;
-                SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
-                if (!entry)
-                {
-                    fprintf(stderr, "UnknownSymbolError: %s\n", key);
-                    res = UnknownSymbolError;
-                    break;
-                }
-
-                switch (entry->type)
-                {
-                case ObjLiteral:
-                    ForthObject__list_push_copy(self->stack, entry->obj);
-                    break;
-                case Function:
-                    res = entry->function(self);
-                    break;
-                case ListClosure:
-                    res = ForthInterpreter__eval(self, entry->obj);
-                    break;
-                }
-            }
-            else if (obj->type == List && obj->list.quasiquoted)
-            {
-                ForthObject *evaluated = ForthInterpreter__resolve_template(self, obj);
-                ForthObject__list_push_copy(self->stack, evaluated);
-            }
-            else
-                ForthObject__list_push_copy(self->stack, obj);
-        }
+        else
+            ForthObject__list_push_copy(self->stack, expr);
 
         break;
     }
     case Symbol:
     {
-        SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, expr->string.chars);
-        if (entry->type == ListClosure)
-            res = ForthInterpreter__eval(self, entry->obj);
+        if (expr->string.symbol_flag != Quoted)
+        {
+            char *key = expr->string.chars;
+            SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
+            if (!entry)
+            {
+                fprintf(stderr, "UnknownSymbolError: %s\n", key);
+                res = UnknownSymbolError;
+                break;
+            }
+
+            res = entry->type == Object ? ForthInterpreter__eval(self, entry->obj) : entry->function(self);
+        }
+        else
+            ForthObject__list_push_copy(self->stack, expr);
 
         break;
     }
     default:
-        fprintf(stderr, "TypeError: eval expression must either be a list or quoted symbol\n");
-        res = TypeError;
+        ForthObject__list_push_copy(self->stack, expr);
     }
+
+    if (res != Ok)
+    {
+        fprintf(stderr, "   while evaluating ");
+        ForthObject__fprint(stderr, expr);
+        fprintf(stderr, "\n");
+    }
+
+    return res;
+}
+
+ForthEvalResult ForthInterpreter__eval_every(ForthInterpreter *self, ForthObject *expr)
+{
+    ForthEvalResult res = Ok;
+
+    if (expr->type == List)
+        for (size_t i = 0; i < expr->list.len; i++)
+            res |= ForthInterpreter__eval(self, expr->list.data[i]);
+    else if (expr->type == Symbol)
+    {
+        char *key = expr->string.chars;
+        SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
+        if (!entry)
+        {
+            fprintf(stderr, "UnknownSymbolError: %s\n", key);
+            res = UnknownSymbolError;
+        }
+        else
+            res = entry->type == Object ? ForthInterpreter__eval_every(self, entry->obj) : entry->function(self);
+    }
+    else
+        res = ForthInterpreter__eval(self, expr);
 
     if (res != Ok)
     {
@@ -395,16 +367,12 @@ ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text)
     // Parse and evaluate each complete expression found
     while (1)
     {
-        bool has_next = ForthParser__next_list(self->parser);
-        if (!has_next)
+        ForthObject *obj = ForthParser__parse_object(self->parser);
+        if (!obj)
             break;
 
-        ForthObject *expr = ForthParser__parse_list(self->parser);
-        if (!expr)
-            return ParsingError;
-
-        res = ForthInterpreter__eval(self, expr);
-        ForthObject__drop(expr);
+        res = ForthInterpreter__eval(self, obj);
+        ForthObject__drop(obj);
     }
 
     return res;

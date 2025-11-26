@@ -275,6 +275,132 @@ ForthEvalResult builtin_at(ForthInterpreter *in)
     return Ok;
 }
 
+ForthEvalResult builtin_split(ForthInterpreter *in)
+{
+    ForthObject *idx_obj = NULL, *container = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &idx_obj, Number, &container, List | String | Symbol);
+    if (args_res != Ok)
+        return args_res;
+
+    long idx = (long)idx_obj->num;
+
+    size_t container_len = container->type == List ? container->list.len : container->string.len;
+    if (idx < 0 || (size_t)idx > container_len)
+    {
+        fprintf(stderr, "IndexError: index %ld out of bounds for length: %zu\n",
+                idx, container_len);
+
+        ForthObject__drop(idx_obj);
+        ForthObject__drop(container);
+
+        return IndexError;
+    }
+
+    ForthObject *right = NULL, *left = NULL;
+    size_t right_len = container_len - idx;
+
+    if (container->type == String)
+    {
+        char right_buf[right_len];
+        memcpy(right_buf, container->string.chars + idx, right_len);
+
+        char left_buf[idx];
+        memcpy(left_buf,container->string.chars, idx);
+
+        right = ForthObject__new_string(right_buf, right_len);
+        left = ForthObject__new_string(left_buf, idx);
+    }
+    else
+    {
+        right = ForthObject__new_list(right_len, false);
+        left = ForthObject__new_list(idx, false);
+
+        for (size_t i = idx; i < container_len; i++)
+            ForthObject__list_push_copy(right, container->list.data[i]);
+        for (size_t i = 0; i < (size_t)idx; i++)
+            ForthObject__list_push_copy(left, container->list.data[i]);
+    }
+
+    ForthObject__list_push_move(in->stack, right);
+    ForthObject__list_push_move(in->stack, left);
+    ForthObject__drop(idx_obj);
+    ForthObject__drop(container);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_concat(ForthInterpreter *in)
+{
+    ForthObject *left = NULL, *right = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &left, List | String, &right, List | String);
+    if (args_res != Ok)
+        return args_res;
+
+    if (left->type != right->type)
+    {
+        ForthObject__drop(left);
+        ForthObject__drop(right);
+        fprintf(stderr, "TypeError: left and right containers must have the same type");
+
+        return TypeError;
+    }
+
+    if (left->type == String)
+    {
+        size_t combined_len = left->string.len + right->string.len;
+        char combined[combined_len];
+        memcpy(combined, left->string.chars, left->string.len);
+        memcpy(combined + left->string.len, right->string.chars, right->string.len);
+
+        ForthObject *res = ForthObject__new_string(combined, combined_len);
+
+        ForthObject__list_push_move(in->stack, res);
+    }
+    else
+    {
+        ForthObject *res = ForthObject__new_list(left->list.len + right->list.len, false);
+        for (size_t i = 0; i < left->list.len; i++)
+            ForthObject__list_push_copy(res, left->list.data[i]);
+        for (size_t i = 0; i < right->list.len; i++)
+            ForthObject__list_push_copy(res, right->list.data[i]);
+
+        ForthObject__list_push_move(in->stack, res);
+    }
+
+    ForthObject__drop(left);
+    ForthObject__drop(right);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_range(ForthInterpreter *in)
+{
+    ForthObject *start_arg = NULL, *end_arg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &start_arg, Number, &end_arg, Number);
+    if (args_res != Ok)
+        return args_res;
+
+    long start = start_arg->num;
+    long end = end_arg->num;
+    long increment = end < start ? -1 : 1;
+    long len = increment * ((long)end - (long)start);
+
+    ForthObject *res = ForthObject__new_list(len, false);
+    while ((start * increment) <= (end * increment))
+    {
+        ForthObject *n = ForthObject__new_number(start);
+        ForthObject__list_push_move(res, n);
+        start += increment;
+    }
+
+    ForthObject__drop(start_arg);
+    ForthObject__drop(end_arg);
+
+    ForthObject__list_push_move(in->stack, res);
+
+    return Ok;
+}
+
 ForthEvalResult builtin_foreach(ForthInterpreter *in)
 {
     ForthObject *body = NULL, *container = NULL;
@@ -296,7 +422,7 @@ ForthEvalResult builtin_foreach(ForthInterpreter *in)
         }
 
         ForthObject__list_push_copy(in->stack, el);
-        res = ForthInterpreter__eval(in, body);
+        res = ForthInterpreter__eval_every(in, body);
         ForthObject__drop(el);
     }
 
@@ -327,12 +453,12 @@ ForthEvalResult builtin_if(ForthInterpreter *in)
 ForthEvalResult builtin_ifelse(ForthInterpreter *in)
 {
     ForthObject *false_branch = NULL, *true_branch = NULL, *condition = NULL;
-    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 3, &false_branch, List, &true_branch, List, &condition, Number);
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 3, &false_branch, List, &true_branch, List, &condition, Number | List);
     if (args_res != Ok)
         return args_res;
 
     ForthObject *branch = condition->num != 0.0 ? true_branch : false_branch;
-    ForthEvalResult res = ForthInterpreter__eval(in, branch);
+    ForthEvalResult res = ForthInterpreter__eval_every(in, branch);
 
     ForthObject__drop(condition);
     ForthObject__drop(true_branch);
@@ -351,7 +477,7 @@ ForthEvalResult builtin_while(ForthInterpreter *in)
     ForthEvalResult res = Ok;
     while (true)
     {
-        ForthInterpreter__eval(in, condition);
+        ForthInterpreter__eval_every(in, condition);
 
         ForthObject *result = NULL;
         args_res = ForthInterpreter__pop_args(in, 1, &result, Number);
@@ -366,7 +492,7 @@ ForthEvalResult builtin_while(ForthInterpreter *in)
         if (should_break)
             break;
 
-        res = ForthInterpreter__eval(in, body);
+        res |= ForthInterpreter__eval_every(in, body);
     }
 
     ForthObject__drop(condition);
@@ -387,7 +513,7 @@ ForthEvalResult builtin_times(ForthInterpreter *in)
 
     ForthEvalResult res = Ok;
     for (double _ = 0; _ < to_num; _++)
-        res = ForthInterpreter__eval(in, body);
+        res = ForthInterpreter__eval_every(in, body);
 
     ForthObject__drop(body);
     return res;
@@ -492,6 +618,25 @@ ForthEvalResult builtin_peek(ForthInterpreter *in)
     return Ok;
 }
 
+ForthEvalResult builtin_write(ForthInterpreter *in)
+{
+    ForthObject *fd_arg = NULL, *obj_arg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &fd_arg, Number, &obj_arg, String | Symbol | Number);
+    if (args_res != Ok)
+        return args_res;
+
+    int fd = (int)fd_arg->num;
+    if (obj_arg->type == Number)
+        dprintf(fd, "%f", obj_arg->num);
+    else
+        dprintf(fd, obj_arg->string.chars);
+
+    ForthObject__drop(fd_arg);
+    ForthObject__drop(obj_arg);
+    
+    return Ok;
+}
+
 ForthEvalResult builtin_print_symbols(ForthInterpreter *in)
 {
     printf("Symbols: ");
@@ -511,10 +656,10 @@ ForthEvalResult builtin_eval(ForthInterpreter *in)
     if (args_res != Ok)
         return args_res;
 
-    ForthInterpreter__eval(in, expr);
+    ForthEvalResult res = ForthInterpreter__eval_every(in, expr);
     ForthObject__drop(expr);
 
-    return Ok;
+    return res;
 }
 
 ForthEvalResult builtin_quote(ForthInterpreter *in)
@@ -553,10 +698,7 @@ ForthEvalResult builtin_define(ForthInterpreter *in)
     if (args_res != Ok)
         return args_res;
 
-    if (val->type == List)
-        ForthInterpreter__register_closure(in, key->string.chars, val);
-    else
-        ForthInterpreter__register_literal(in, key->string.chars, val);
+    ForthInterpreter__register_object(in, key->string.chars, val);
 
     ForthObject__drop(val);
     ForthObject__drop(key);
@@ -582,6 +724,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
 {
     // Math
     ForthInterpreter__register_function(in, "add", builtin_add);
+
     ForthInterpreter__register_function(in, "sub", builtin_sub);
     ForthInterpreter__register_function(in, "mul", builtin_mul);
     ForthInterpreter__register_function(in, "div", builtin_div);
@@ -608,6 +751,9 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "contains", builtin_contains);
     ForthInterpreter__register_function(in, "at", builtin_at);
     ForthInterpreter__register_function(in, "foreach", builtin_foreach);
+    ForthInterpreter__register_function(in, "range", builtin_range);
+    ForthInterpreter__register_function(in, "concat", builtin_concat);
+    ForthInterpreter__register_function(in, "split", builtin_split);
 
     // Control Flow
     ForthInterpreter__register_function(in, "if", builtin_if);
@@ -627,6 +773,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "peek", builtin_peek);
     ForthInterpreter__register_function(in, "print_stack", builtin_print_stack);
     ForthInterpreter__register_function(in, "print_symbols", builtin_print_symbols);
+    ForthInterpreter__register_function(in, "write", builtin_write);
 
     // Eval
     ForthInterpreter__register_function(in, "eval", builtin_eval);
