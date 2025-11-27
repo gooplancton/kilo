@@ -253,7 +253,7 @@ ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr
                 break;
             }
 
-            res = entry->type == Object ? ForthInterpreter__eval(self, entry->obj) : entry->function(self);
+            res = entry->type == Object ? ForthInterpreter__eval_every(self, entry->obj) : entry->function(self);
         }
         else
             ForthObject__list_push_copy(self->stack, expr);
@@ -281,18 +281,6 @@ ForthEvalResult ForthInterpreter__eval_every(ForthInterpreter *self, ForthObject
     if (expr->type == List)
         for (size_t i = 0; i < expr->list.len; i++)
             res |= ForthInterpreter__eval(self, expr->list.data[i]);
-    else if (expr->type == Symbol)
-    {
-        char *key = expr->string.chars;
-        SymbolsTableEntry *entry = SymbolsTable__get(self->symbols, key);
-        if (!entry)
-        {
-            fprintf(stderr, "UnknownSymbolError: %s\n", key);
-            res = UnknownSymbolError;
-        }
-        else
-            res = entry->type == Object ? ForthInterpreter__eval_every(self, entry->obj) : entry->function(self);
-    }
     else
         res = ForthInterpreter__eval(self, expr);
 

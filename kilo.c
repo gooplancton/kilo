@@ -162,6 +162,45 @@ ForthEvalResult kiloGetRow(ForthInterpreter *f) {
     return Ok;
 }
 
+void editorInsertRow(int at, char *s, size_t len);
+void editorUpdateRow(erow* row);
+void editorDelRow(int at);
+
+ForthEvalResult kiloSetRow(ForthInterpreter *f) {
+    ForthObject *idx_arg = NULL, *row_arg = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &idx_arg, Number, &row_arg, String);
+    if (args_res != Ok)
+        return args_res;
+
+    int idx = (int)idx_arg->num;
+    ForthObject__drop(idx_arg);
+
+    if (idx > E.numrows)
+        return IndexError;
+    else if (idx == E.numrows)
+        editorInsertRow(idx, row_arg->string.chars, row_arg->string.len);
+    else
+    {
+        erow *row = E.row + idx;
+        row->size = row_arg->string.len;
+        row->chars = realloc(row->chars, row->size);
+        memcpy(row->chars, row_arg->string.chars, row->size);
+        editorUpdateRow(row);
+    }
+
+    ForthObject__drop(row_arg);
+
+    return Ok;
+}
+
+int editorSave(void);
+ForthEvalResult kiloSave(ForthInterpreter *f)
+{
+    editorSave();
+
+    return Ok;
+}
+
 ForthEvalResult kiloGetCursorX(ForthInterpreter *f) {
     ForthObject *cx = ForthObject__new_number((double)E.cx);
     ForthObject__list_push_move(f->stack, cx);
@@ -198,6 +237,13 @@ ForthEvalResult kiloSetStatusMessage(ForthInterpreter *f) {
     }
 
     ForthObject__drop(status_msg);
+
+    return Ok;
+}
+
+ForthEvalResult kiloGetNumRows(ForthInterpreter *f) {
+    ForthObject *numrows = ForthObject__new_number((double)E.numrows);
+    ForthObject__list_push_move(f->stack, numrows);
 
     return Ok;
 }
@@ -261,11 +307,11 @@ ForthEvalResult kiloProcessKeyRecursive(ForthInterpreter *f) {
 
 ForthEvalResult kiloOnKey(ForthInterpreter *f) {
     ForthObject *obj = NULL, *key = NULL;
-    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &obj, Symbol | List, &key, Number);
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &obj, Symbol | List, &key, Number | String);
     if (args_res != Ok)
         return args_res;
 
-    int k = (int)key->num;
+    int k = key->type == Number ? (int)key->num : (int)*key->string.chars;
     ForthObject__drop(key);
 
     if (!E.callbacks) {
@@ -295,7 +341,10 @@ void initInterpreter(void) {
     ForthInterpreter__load_builtins(F);
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
     ForthInterpreter__register_function(F, "kilo_exit", kiloExit);
+    ForthInterpreter__register_function(F, "kilo_save", kiloSave);
+    ForthInterpreter__register_function(F, "kilo_set_row", kiloSetRow);
     ForthInterpreter__register_function(F, "kilo_get_row", kiloGetRow);
+    ForthInterpreter__register_function(F, "kilo_get_numrows", kiloGetNumRows);
     ForthInterpreter__register_function(F, "kilo_get_cx", kiloGetCursorX);
     ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
     ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
@@ -1449,7 +1498,6 @@ void editorProcessKeypress(int c, int trigger_cb) {
 
     ForthObject *cb_obj = editorGetOnKeyCallback(c);
     if (cb_obj) {
-        ForthObject__fprint(cb_obj, stderr);
         ForthEvalResult res = ForthInterpreter__eval_every(F, cb_obj);;
         
         if (res != Ok)
