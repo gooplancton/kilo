@@ -205,18 +205,11 @@ ForthObject *ForthInterpreter__resolve_template(ForthInterpreter *self, ForthObj
         }
 
         if (evaluated->type == Object)
-        {
-            // if (el->obj->type == List)
-            //     ForthObject__list_push_copy(resolved, el);
-            // else
             ForthObject__list_push_copy(resolved, evaluated->obj);
-        }
         else
-        {
             evaluated->function(self);
-        }
-
     }
+
     return resolved;
 }
 

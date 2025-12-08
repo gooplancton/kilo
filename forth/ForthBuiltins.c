@@ -1,6 +1,8 @@
 #include "ForthBuiltins.h"
 #include "ForthInterpreter.h"
 #include "ForthObject.h"
+#include <time.h>
+#include <unistd.h>
 
 // Macros for common patterns
 #define BINARY_MATH_OP(op_name, operation)                                                      \
@@ -163,14 +165,14 @@ ForthEvalResult builtin_neq(ForthInterpreter *in)
 }
 
 // Strings/Lists
-ForthEvalResult builtin_contains(ForthInterpreter *in)
+ForthEvalResult builtin_indexof(ForthInterpreter *in)
 {
     ForthObject *needle = NULL, *haystack = NULL;
     ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &needle, Any, &haystack, List | String | Symbol);
     if (args_res != Ok)
         return args_res;
 
-    bool found = false;
+    double found_idx = -1;
 
     if (haystack->type == List)
     {
@@ -179,7 +181,7 @@ ForthEvalResult builtin_contains(ForthInterpreter *in)
             ForthObject *item = haystack->list.data[i];
             if (ForthObject__eq(item, needle))
             {
-                found = true;
+                found_idx = (double)i;
                 break;
             }
         }
@@ -207,17 +209,35 @@ ForthEvalResult builtin_contains(ForthInterpreter *in)
         memcpy(needle_str, needle->string.chars, needle->string.len);
         needle_str[needle->string.len] = '\0';
 
-        found = (strstr(haystack_str, needle_str) != NULL);
+        char *found_ptr = strstr(haystack_str, needle_str);
+        if (found_ptr) {
+            found_idx = (double)(found_ptr - haystack_str);
+        }
 
         free(haystack_str);
         free(needle_str);
     }
 
-    ForthObject *res = ForthObject__new_number(found ? 1.0 : 0.0);
+    ForthObject *res = ForthObject__new_number(found_idx);
     ForthObject__list_push_move(in->stack, res);
 
     ForthObject__drop(haystack);
     ForthObject__drop(needle);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_contains(ForthInterpreter *in)
+{
+    ForthEvalResult args_res = builtin_indexof(in);
+    if (args_res != Ok)
+        return args_res;
+
+    ForthObject *indexof_res = ForthObject__list_pop(in->stack);
+    ForthObject *res = ForthObject__new_number(indexof_res->num == -1 ? 0 : 1);
+
+    ForthObject__list_push_move(in->stack, res);
+    ForthObject__drop(indexof_res);
 
     return Ok;
 }
@@ -271,6 +291,48 @@ ForthEvalResult builtin_at(ForthInterpreter *in)
     ForthObject__list_push_move(in->stack, result);
     ForthObject__drop(idx_obj);
     ForthObject__drop(container);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_set_at(ForthInterpreter *in)
+{
+    ForthObject *new_el = NULL, *idx_obj = NULL, *container = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 3, &new_el, Any, &idx_obj, Number, &container, List);
+    if (args_res != Ok)
+        return args_res;
+
+    size_t idx = (size_t)idx_obj->num;
+    size_t container_len = container->list.len;
+    if (idx_obj->num < 0 || idx > container_len)
+    {
+        fprintf(stderr, "IndexError: index %ld out of bounds for length: %zu\n",
+                idx, container_len);
+
+        ForthObject__drop(new_el);
+        ForthObject__drop(idx_obj);
+        ForthObject__drop(container);
+
+        return IndexError;
+    }
+
+    ForthObject__drop(container->list.data[idx]);
+    container->list.data[idx] = new_el;
+    ForthObject__drop(idx_obj);
+    ForthObject__list_push_move(in->stack, container);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_append(ForthInterpreter *in)
+{
+    ForthObject *new_el = NULL, *container = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &new_el, Any, &container, List);
+    if (args_res != Ok)
+        return args_res;
+
+    ForthObject__list_push_move(container, new_el);
+    ForthObject__list_push_move(in->stack, container);
 
     return Ok;
 }
@@ -648,6 +710,74 @@ ForthEvalResult builtin_print_symbols(ForthInterpreter *in)
     return Ok;
 }
 
+// System
+ForthEvalResult builtin_sleep_ms(ForthInterpreter *in)
+{
+    ForthObject *ms_obj = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 1, &ms_obj, Number);
+    if (args_res != Ok)
+        return args_res;
+
+    int ms = (int)ms_obj->num;
+    usleep(ms * 1000);
+
+    ForthObject__drop(ms_obj);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_now_ts(ForthInterpreter *in)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    double time_in_ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
+
+    ForthObject *time_obj = ForthObject__new_number(time_in_ms);
+    ForthObject__list_push_move(in->stack, time_obj);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_now(ForthInterpreter *in)
+{
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+
+    char buffer[26];
+    strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+
+    ForthObject *time_str = ForthObject__new_string(buffer, strlen(buffer));
+    ForthObject__list_push_move(in->stack, time_str);
+
+    return Ok;
+}
+
+ForthEvalResult builtin_getenv(ForthInterpreter *in)
+{
+    ForthObject *var_name = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 1, &var_name, String);
+    if (args_res != Ok)
+        return args_res;
+
+    char *var_name_str = malloc(var_name->string.len + 1);
+    memcpy(var_name_str, var_name->string.chars, var_name->string.len);
+    var_name_str[var_name->string.len] = '\0';
+
+    char *val_str = getenv(var_name_str);
+    ForthObject *val_obj;
+    if (!val_str) {
+        val_obj = ForthObject__new_string("", 0);
+    } else {
+        size_t val_str_len = strlen(val_str);
+        val_obj = ForthObject__new_string(val_str, val_str_len);
+    }
+
+    free(var_name_str);
+    ForthObject__list_push_move(in->stack, val_obj);
+
+    return Ok;
+}
+
 // Eval
 ForthEvalResult builtin_eval(ForthInterpreter *in)
 {
@@ -658,6 +788,29 @@ ForthEvalResult builtin_eval(ForthInterpreter *in)
 
     ForthEvalResult res = ForthInterpreter__eval_every(in, expr);
     ForthObject__drop(expr);
+
+    return res;
+}
+
+ForthEvalResult builtin_load_file(ForthInterpreter *in)
+{
+    ForthObject *file_path = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 1, &file_path, String);
+    if (args_res != Ok)
+        return args_res;
+
+    char *file_path_copied = malloc(file_path->string.len + 1);
+    memcpy(file_path_copied, file_path->string.chars, file_path->string.len);
+    file_path_copied[file_path->string.len] = '\0';
+
+    ForthObject__drop(file_path);
+
+    FILE *file = fopen(file_path_copied, "r");
+    if (!file)
+        return FileNotFoundError;
+
+    ForthEvalResult res = ForthInterpreter__run_file(in, file);
+    fclose(file);
 
     return res;
 }
@@ -749,7 +902,10 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     // Strings/Lists
     ForthInterpreter__register_function(in, "len", builtin_len);
     ForthInterpreter__register_function(in, "contains", builtin_contains);
+    ForthInterpreter__register_function(in, "indexof", builtin_indexof);
     ForthInterpreter__register_function(in, "at", builtin_at);
+    ForthInterpreter__register_function(in, "set_at", builtin_set_at);
+    ForthInterpreter__register_function(in, "append", builtin_append);
     ForthInterpreter__register_function(in, "foreach", builtin_foreach);
     ForthInterpreter__register_function(in, "range", builtin_range);
     ForthInterpreter__register_function(in, "concat", builtin_concat);
@@ -775,10 +931,17 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "print_symbols", builtin_print_symbols);
     ForthInterpreter__register_function(in, "write", builtin_write);
 
+    // System
+    ForthInterpreter__register_function(in, "sleep_ms", builtin_sleep_ms);
+    ForthInterpreter__register_function(in, "now", builtin_now);
+    ForthInterpreter__register_function(in, "now_ts", builtin_now_ts);
+    ForthInterpreter__register_function(in, "getenv", builtin_getenv);
+
     // Eval
     ForthInterpreter__register_function(in, "eval", builtin_eval);
     ForthInterpreter__register_function(in, "quote", builtin_quote);
     ForthInterpreter__register_function(in, "unquote", builtin_unquote);
+    ForthInterpreter__register_function(in, "load_file", builtin_load_file);
 
     // Define
     ForthInterpreter__register_function(in, "define", builtin_define);

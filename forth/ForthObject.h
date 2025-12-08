@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 199309L
+
 #ifndef FORTH_OBJECT_H
 #define FORTH_OBJECT_H
 

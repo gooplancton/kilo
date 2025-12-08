@@ -20,6 +20,7 @@ typedef enum ForthEvalResult {
     ParsingError,
     IndexError,
     UnknownSymbolError,
+    FileNotFoundError
 } ForthEvalResult;
 
 // NOTE: forward-declaration for FunctionEntry type

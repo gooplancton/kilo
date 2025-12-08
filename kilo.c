@@ -58,6 +58,7 @@
 #ifdef PLUGINS_ENABLED
 #include "ForthBuiltins.h"
 #include <dirent.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #endif
 
@@ -109,12 +110,103 @@ struct onKeyCallback {
     ForthObject *cb_obj;    /* List or Symbol */
 };
 
-// TODO: other types of callback (e.g. onStartup, onTimeout, onExit, etc...)
+// forth builtin: kilo_ontimeout
+// e.g.: [1000 [time_now kilo_set_status_msg] define]
+struct onTimeoutCallback {
+    int timeout_ms;         /* Timeout in milliseconds */
+    ForthObject *cb_obj;    /* List or Symbol */
+};
 
 struct callbackTable {
+    ForthObject *onExitCallback;
+
     struct onKeyCallback *onKeyCallbacks;
     int onKeyCallbacksLen;
+
+    struct onTimeoutCallback *onTimeoutCallbacks;
+    int onTimeoutCallbacksLen;
 };
+
+struct callbackSchedule {
+    int delta_ms;
+    int n_states;
+    ForthObject ***callbacks;
+};
+
+struct callbackSchedule *computeCallbackSchedule(struct callbackTable *callbacks)
+{
+
+    if (callbacks->onTimeoutCallbacksLen == 0)
+        return NULL;
+
+    int max_timeout = callbacks->onTimeoutCallbacks[0].timeout_ms;
+    int max_common_denominator = max_timeout;
+    for (int i = 1; i < callbacks->onTimeoutCallbacksLen; i++) {
+        int t = callbacks->onTimeoutCallbacks[i].timeout_ms;
+        if (t > max_timeout)
+            max_timeout = t;
+
+        // compute GCD
+        int a = max_common_denominator;
+        int b = t;
+        while (b != 0) {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+        max_common_denominator = a;
+    }
+
+    struct callbackSchedule *schedule = malloc(sizeof(*schedule));
+    schedule->delta_ms = max_common_denominator;
+    schedule->n_states = 0;
+    schedule->callbacks = NULL;
+
+    int t = max_common_denominator;
+    
+    while (t <= max_timeout) {
+        schedule->callbacks = realloc(schedule->callbacks, sizeof(ForthObject **) * (schedule->n_states + 1));
+        schedule->callbacks[schedule->n_states] = NULL;
+
+        int cbs_in_state = 0;
+        for (int i = 0; i < callbacks->onTimeoutCallbacksLen; i++) {
+            if (t % callbacks->onTimeoutCallbacks[i].timeout_ms == 0) {
+                schedule->callbacks[schedule->n_states] = realloc(
+                    schedule->callbacks[schedule->n_states],
+                    sizeof(ForthObject *) * (cbs_in_state + 1)
+                );
+                schedule->callbacks[schedule->n_states][cbs_in_state] =
+                    callbacks->onTimeoutCallbacks[i].cb_obj;
+                cbs_in_state += 1;
+            }
+        }
+
+        if (cbs_in_state > 0)
+        {
+            schedule->callbacks[schedule->n_states] = realloc(
+                schedule->callbacks[schedule->n_states],
+                sizeof(ForthObject *) * (cbs_in_state + 1)
+            );
+
+            schedule->callbacks[schedule->n_states][cbs_in_state] = NULL;
+        }
+
+        t += max_common_denominator;
+        schedule->n_states += 1;
+    }
+
+    return schedule;
+}
+
+void freeCallbackSchedule(struct callbackSchedule *schedule)
+{
+    for (int i = 0; i < schedule->n_states; i++)
+        if (schedule->callbacks[i])
+            free(schedule->callbacks[i]);
+
+    free(schedule->callbacks);
+    free(schedule);
+}
 
 #endif
 
@@ -305,6 +397,61 @@ ForthEvalResult kiloProcessKeyRecursive(ForthInterpreter *f) {
     return Ok;
 }
 
+ForthEvalResult kiloGetStatusMessage(ForthInterpreter *f) {
+    int status_msg_len = strlen(E.statusmsg);
+    ForthObject *res = ForthObject__new_string(E.statusmsg, status_msg_len);
+
+    ForthObject__list_push_move(f->stack, res);
+
+    return Ok;
+}
+
+ForthEvalResult kiloOnExit(ForthInterpreter *f) {
+    ForthObject *obj = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 1, &obj, Symbol | List);
+    if (args_res != Ok)
+        return args_res;
+
+    if (!E.callbacks) {
+        E.callbacks = calloc(1, sizeof(*E.callbacks));
+    }
+
+    E.callbacks->onExitCallback = obj;
+
+    return Ok;
+}
+
+ForthEvalResult kiloOnTimeout(ForthInterpreter *f) {
+    ForthObject *obj = NULL, *timeout = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &obj, Symbol | List, &timeout, Number);
+    if (args_res != Ok)
+        return args_res;
+
+    int t = (int)timeout->num;
+    ForthObject__drop(timeout);
+
+    if (!E.callbacks) {
+        E.callbacks = calloc(1, sizeof(*E.callbacks));
+    }
+
+    int newlen = E.callbacks->onTimeoutCallbacksLen + 1;
+    struct onTimeoutCallback *newarr = realloc(E.callbacks->onTimeoutCallbacks,
+                                           sizeof(struct onTimeoutCallback) * newlen);
+    if (!newarr) {
+        // out of memory!
+        ForthObject__drop(obj);
+        return Ok;
+    }
+    E.callbacks->onTimeoutCallbacks = newarr;
+    E.callbacks->onTimeoutCallbacksLen = newlen;
+
+    E.callbacks->onTimeoutCallbacks[newlen - 1].timeout_ms = t;
+    E.callbacks->onTimeoutCallbacks[newlen - 1].cb_obj = obj;
+    fprintf(stderr, "Info: Registered callback on timeout: %d ms\n", t);
+
+    return Ok;
+}
+
 ForthEvalResult kiloOnKey(ForthInterpreter *f) {
     ForthObject *obj = NULL, *key = NULL;
     ForthEvalResult args_res = ForthInterpreter__pop_args(f, 2, &obj, Symbol | List, &key, Number | String);
@@ -336,10 +483,45 @@ ForthEvalResult kiloOnKey(ForthInterpreter *f) {
     return Ok;
 }
 
+void editorRefreshScreen(void);
+
+void timeoutHandler(void *arg) {
+    struct callbackSchedule *schedule = computeCallbackSchedule(E.callbacks);
+    if (!schedule) {
+        return;
+    }
+
+    fprintf(stderr, "Info: Starting timeout handler thread with %d states, delta %d ms\n",
+            schedule->n_states, schedule->delta_ms);
+    int state = 0;
+
+    while (1) {
+        usleep(schedule->delta_ms * 1000);
+
+        if (schedule->callbacks[state]) {
+            for (int i = 0; schedule->callbacks[state][i] != NULL; i++) {
+                ForthObject *cb_obj = schedule->callbacks[state][i];
+                ForthEvalResult res = ForthInterpreter__eval_every(F, cb_obj);
+                if (res != Ok) {
+                    fprintf(stderr, "Error: onTimeout callback exited with %d\n", res);
+                }
+            }
+
+            editorRefreshScreen();
+        }
+
+        state = (state + 1) % schedule->n_states;
+    }
+
+    freeCallbackSchedule(schedule);
+}
+
 void initInterpreter(void) {
     F = ForthInterpreter__new();
     ForthInterpreter__load_builtins(F);
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
+    ForthInterpreter__register_function(F, "kilo_onexit", kiloOnExit);
+    ForthInterpreter__register_function(F, "kilo_ontimeout", kiloOnTimeout);
     ForthInterpreter__register_function(F, "kilo_exit", kiloExit);
     ForthInterpreter__register_function(F, "kilo_save", kiloSave);
     ForthInterpreter__register_function(F, "kilo_set_row", kiloSetRow);
@@ -349,6 +531,7 @@ void initInterpreter(void) {
     ForthInterpreter__register_function(F, "kilo_set_cx", kiloSetCursorX);
     ForthInterpreter__register_function(F, "kilo_get_cy", kiloGetCursorY);
     ForthInterpreter__register_function(F, "kilo_set_cy", kiloSetCursorY);
+    ForthInterpreter__register_function(F, "kilo_get_status_msg", kiloGetStatusMessage);
     ForthInterpreter__register_function(F, "kilo_set_status_msg", kiloSetStatusMessage);
     ForthInterpreter__register_function(F, "kilo_process_key", kiloProcessKey);
     ForthInterpreter__register_function(F, "kilo_process_key_rec", kiloProcessKeyRecursive);
@@ -389,12 +572,16 @@ void initInterpreter(void) {
             fprintf(stderr, "Info: Loaded plugin file '%s', exited with %d\n", full_path, res);
             fclose(plugin_file);
         } else {
-            // TODO: print to stderr
             fprintf(stderr, "Warning: Could not open plugin file '%s'\n", full_path);
         }
     }
 
     closedir(dir);
+
+    if (E.callbacks->onTimeoutCallbacksLen) {
+        pthread_t timeout_thread;
+        pthread_create(&timeout_thread, NULL, (void *)timeoutHandler, NULL);
+    }
 }
 
 ForthObject *editorGetOnKeyCallback(int c) {
@@ -509,7 +696,16 @@ void disableRawMode(int fd) {
 
 /* Called at exit to avoid remaining in raw mode. */
 void editorAtExit(void) {
+    #ifdef PLUGINS_ENABLED
+    if (F && E.callbacks && E.callbacks->onExitCallback) {
+        ForthObject *cb = E.callbacks->onExitCallback;
+        ForthEvalResult res = ForthInterpreter__eval_every(F, cb);
+        fprintf(stderr, "Info: Executed on-exit callback, exited with %d\n", res);
+    }
+    #endif
+
     disableRawMode(STDIN_FILENO);
+    write(STDOUT_FILENO,"\x1b[1;1H\x1b[J",9);
 }
 
 /* Raw mode: 1960 magic shit. */
@@ -1606,16 +1802,11 @@ void initEditor(void) {
     signal(SIGWINCH, handleSigWinCh);
 }
 
-void clearScreen(void) {
-    write(STDOUT_FILENO,"\x1b[1;1H\x1b[J",9);
-}
-
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr,"Usage: kilo <filename>\n");
         exit(1);
     }
-    atexit(clearScreen);
     initEditor();
 #ifdef PLUGINS_ENABLED
     initInterpreter();
