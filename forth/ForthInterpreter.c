@@ -1,6 +1,7 @@
 #include "ForthInterpreter.h"
 #include "ForthObject.h"
 #include "ForthParser.h"
+#include "ForthBuiltins.h"
 
 SymbolsTableEntry *SymbolsTableEntry__new_object(char *key, ForthObject *obj)
 {
@@ -150,12 +151,14 @@ void SymbolsTable__remove(SymbolsTable *self, char *key)
     }
 }
 
-ForthInterpreter *ForthInterpreter__new(void)
+ForthInterpreter *ForthInterpreter__new(bool is_sandboxed)
 {
     ForthInterpreter *self = malloc(sizeof(*self));
     self->stack = ForthObject__new_list(DEFAULT_LIST_CAP, false);
     self->symbols = SymbolsTable__new();
     self->parser = ForthParser__new();
+    self->is_sandboxed = is_sandboxed;
+    ForthInterpreter__load_builtins(self);
 
     return self;
 }
@@ -359,53 +362,23 @@ ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text)
     return res;
 }
 
-ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, FILE *file)
+ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, char *file_path)
 {
+    FILE *file = fopen(file_path, "r");
     if (!file)
-    {
-        fprintf(stderr, "ParsingError: invalid file pointer\n");
-        return ParsingError;
-    }
+        return FileNotFoundError;
 
-    // Read the file in chunks and parse/eval incrementally
-    char buffer[4096];
-    size_t total_bytes_read = 0;
-    size_t bytes_read;
+    fseek(file, 0, SEEK_END);
+    size_t file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
-    ForthEvalResult res = Ok;
+    char *buffer = malloc(file_size + 1);
 
-    while ((bytes_read = fread(buffer + total_bytes_read, 1,
-                               sizeof(buffer) - total_bytes_read - 1, file)) > 0)
-    {
-        total_bytes_read += bytes_read;
-        buffer[total_bytes_read] = '\0';
+    fread(buffer, 1, file_size, file);
+    buffer[file_size] = '\0';
 
-        // Parse and evaluate what we have so far
-        res = ForthInterpreter__parse_eval(self, buffer);
-
-        // If the parser consumed all input, reset for next chunk
-        if (self->parser->offset >= total_bytes_read)
-        {
-            total_bytes_read = 0;
-        }
-        else
-        {
-            // Move remaining unparsed data to the beginning of buffer
-            size_t remaining = total_bytes_read - self->parser->offset;
-            memmove(buffer, buffer + self->parser->offset, remaining);
-            total_bytes_read = remaining;
-
-            // Reset parser for the remaining data
-            ForthParser__reset(self->parser, buffer);
-        }
-    }
-
-    // Handle any remaining data in buffer
-    if (total_bytes_read > 0)
-    {
-        buffer[total_bytes_read] = '\0';
-        res = ForthInterpreter__parse_eval(self, buffer);
-    }
+    ForthEvalResult res = ForthInterpreter__parse_eval(self, buffer);
+    fclose(file);
 
     return res;
 }

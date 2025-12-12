@@ -12,6 +12,8 @@ ForthParser *ForthParser__new(void)
 void ForthParser__reset(ForthParser *self, char *string)
 {
     self->offset = 0;
+    if (self->string)
+        free(self->string);
     self->string = string;
 }
 
@@ -23,6 +25,49 @@ void ForthParser__drop(ForthParser *self)
 inline char *ForthParser__char(ForthParser *self)
 {
     return self->string + self->offset;
+}
+
+char *ForthParser__symbol_name_at(ForthParser *self, size_t offset, size_t *out_len)
+{
+    fprintf(stderr, "debug: parser string: %s\n", self->string);
+    if (self->string == NULL || offset >= strlen(self->string))
+        return NULL;
+
+    // Find the start of the word by going left
+    int start = offset;
+    while (start > 0 && (isalpha(self->string[start - 1]) || self->string[start - 1] == '_'))
+        start--;
+
+    // Find the end of the word by going right
+    int end = offset;
+    while (self->string[end] != '\0' && (isalpha(self->string[end]) || self->string[end] == '_'))
+        end++;
+
+    *out_len = end - start;
+    return self->string + start;
+}
+
+size_t ForthParser__line_col_to_offset(ForthParser *self, size_t line, size_t col)
+{
+    size_t offset = 0;
+    int current_line = 0;
+    int current_char = 0;
+    
+    for (size_t i = 0; self->string[i] != '\0'; i++) {
+        if (current_line == line && current_char == col) {
+            offset = i;
+            break;
+        }
+        
+        if (self->string[i] == '\n') {
+            current_line++;
+            current_char = 0;
+        } else {
+            current_char++;
+        }
+    }
+
+    return offset;
 }
 
 ForthObject *ForthParser__parse_string(ForthParser *self)

@@ -246,6 +246,9 @@ inline void ForthObject__print(ForthObject *obj)
 
 bool ForthObject__eq(ForthObject *self, ForthObject *other)
 {
+    if (self == other)
+        return true;
+
     if (self->type != other->type)
         return false;
 

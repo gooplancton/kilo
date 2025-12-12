@@ -18,6 +18,8 @@ ForthObject *ForthParser__parse_object(ForthParser *self);
 
 // Utils
 char *ForthParser__char(ForthParser *self);
+char *ForthParser__symbol_name_at(ForthParser *self, size_t offset, size_t *out_len);
+size_t ForthParser__line_col_to_offset(ForthParser *self, size_t line, size_t col);
 
 // Factory
 ForthParser *ForthParser__new(void);

@@ -151,6 +151,23 @@ ForthEvalResult builtin_eq(ForthInterpreter *in)
     return Ok;
 }
 
+ForthEvalResult builtin_is(ForthInterpreter *in)
+{
+    ForthObject *obj1 = NULL, *obj2 = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 2, &obj1, Any, &obj2, Any);
+    if (args_res != Ok)
+        return args_res;
+
+    bool is_identical = obj1 == obj2;
+    ForthObject *res = ForthObject__new_number(is_identical ? 1.0 : 0.0);
+    ForthObject__list_push_move(in->stack, res);
+
+    ForthObject__drop(obj1);
+    ForthObject__drop(obj2);
+
+    return Ok;
+}
+
 ForthEvalResult builtin_neq(ForthInterpreter *in)
 {
     builtin_eq(in);
@@ -607,6 +624,20 @@ ForthEvalResult builtin_dup(ForthInterpreter *in)
     return Ok;
 }
 
+ForthEvalResult builtin_clone(ForthInterpreter *in)
+{
+    ForthObject *el = NULL;
+    ForthEvalResult args_res = ForthInterpreter__pop_args(in, 1, &el, Any);
+    if (args_res != Ok)
+        return args_res;
+
+    ForthObject *cloned = ForthObject__deep_clone(el);
+    ForthObject__list_push_move(in->stack, el);
+    ForthObject__list_push_move(in->stack, cloned);
+
+    return Ok;
+}
+
 ForthEvalResult builtin_swap(ForthInterpreter *in)
 {
     ForthObject *el1 = NULL, *el2 = NULL;
@@ -655,6 +686,9 @@ ForthEvalResult builtin_symbols(ForthInterpreter *in)
 // Print
 ForthEvalResult builtin_print_stack(ForthInterpreter *in)
 {
+    if (in->is_sandboxed)
+        return Ok;
+
     printf("Stack: ");
     ForthObject__print(in->stack);
     printf("\n");
@@ -664,6 +698,9 @@ ForthEvalResult builtin_print_stack(ForthInterpreter *in)
 
 ForthEvalResult builtin_peek(ForthInterpreter *in)
 {
+    if (in->is_sandboxed)
+        return Ok;
+
     if (in->stack->list.len)
     {
         printf("Top of Stack: ");
@@ -687,11 +724,14 @@ ForthEvalResult builtin_write(ForthInterpreter *in)
     if (args_res != Ok)
         return args_res;
 
-    int fd = (int)fd_arg->num;
-    if (obj_arg->type == Number)
-        dprintf(fd, "%f", obj_arg->num);
-    else
-        dprintf(fd, obj_arg->string.chars);
+    if (!in->is_sandboxed)
+    {
+        int fd = (int)fd_arg->num;
+        if (obj_arg->type == Number)
+            dprintf(fd, "%f", obj_arg->num);
+        else
+            dprintf(fd, obj_arg->string.chars);
+    }
 
     ForthObject__drop(fd_arg);
     ForthObject__drop(obj_arg);
@@ -701,12 +741,26 @@ ForthEvalResult builtin_write(ForthInterpreter *in)
 
 ForthEvalResult builtin_print_symbols(ForthInterpreter *in)
 {
+    if (in->is_sandboxed)
+        return Ok;
+
     printf("Symbols: ");
     for (size_t i = 0; i < in->symbols->len; i++)
         printf("%s ", in->symbols->entries[i]->key);
 
     printf("\n");
 
+    return Ok;
+}
+
+ForthEvalResult builtin_print_file(ForthInterpreter *in)
+{
+    if (in->is_sandboxed)
+        return Ok;
+
+    if (in->parser->string)
+        printf("%s\n", in->parser->string);
+    
     return Ok;
 }
 
@@ -719,7 +773,8 @@ ForthEvalResult builtin_sleep_ms(ForthInterpreter *in)
         return args_res;
 
     int ms = (int)ms_obj->num;
-    usleep(ms * 1000);
+    if (!in->is_sandboxed)
+        usleep(ms * 1000);
 
     ForthObject__drop(ms_obj);
 
@@ -763,7 +818,7 @@ ForthEvalResult builtin_getenv(ForthInterpreter *in)
     memcpy(var_name_str, var_name->string.chars, var_name->string.len);
     var_name_str[var_name->string.len] = '\0';
 
-    char *val_str = getenv(var_name_str);
+    char *val_str = secure_getenv(var_name_str);
     ForthObject *val_obj;
     if (!val_str) {
         val_obj = ForthObject__new_string("", 0);
@@ -805,14 +860,10 @@ ForthEvalResult builtin_load_file(ForthInterpreter *in)
 
     ForthObject__drop(file_path);
 
-    FILE *file = fopen(file_path_copied, "r");
-    if (!file)
-        return FileNotFoundError;
+    if (!in->is_sandboxed)
+        return ForthInterpreter__run_file(in, file_path_copied);
 
-    ForthEvalResult res = ForthInterpreter__run_file(in, file);
-    fclose(file);
-
-    return res;
+    return Ok;
 }
 
 ForthEvalResult builtin_quote(ForthInterpreter *in)
@@ -877,7 +928,6 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
 {
     // Math
     ForthInterpreter__register_function(in, "add", builtin_add);
-
     ForthInterpreter__register_function(in, "sub", builtin_sub);
     ForthInterpreter__register_function(in, "mul", builtin_mul);
     ForthInterpreter__register_function(in, "div", builtin_div);
@@ -893,6 +943,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
 
     // Comparison
     ForthInterpreter__register_function(in, "eq", builtin_eq);
+    ForthInterpreter__register_function(in, "is", builtin_is);
     ForthInterpreter__register_function(in, "neq", builtin_neq);
     ForthInterpreter__register_function(in, "gt", builtin_gt);
     ForthInterpreter__register_function(in, "gte", builtin_gte);
@@ -920,6 +971,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     // Execution Stack
     ForthInterpreter__register_function(in, "pop", builtin_pop);
     ForthInterpreter__register_function(in, "dup", builtin_dup);
+    ForthInterpreter__register_function(in, "clone", builtin_clone);
     ForthInterpreter__register_function(in, "swap", builtin_swap);
     ForthInterpreter__register_function(in, "stack", builtin_stack);
     ForthInterpreter__register_function(in, "symbols", builtin_symbols);
@@ -929,6 +981,7 @@ void ForthInterpreter__load_builtins(ForthInterpreter *in)
     ForthInterpreter__register_function(in, "peek", builtin_peek);
     ForthInterpreter__register_function(in, "print_stack", builtin_print_stack);
     ForthInterpreter__register_function(in, "print_symbols", builtin_print_symbols);
+    ForthInterpreter__register_function(in, "print_file", builtin_print_file);
     ForthInterpreter__register_function(in, "write", builtin_write);
 
     // System

@@ -517,8 +517,7 @@ void timeoutHandler(void *arg) {
 }
 
 void initInterpreter(void) {
-    F = ForthInterpreter__new();
-    ForthInterpreter__load_builtins(F);
+    F = ForthInterpreter__new(true);
     ForthInterpreter__register_function(F, "kilo_onkey", kiloOnKey);
     ForthInterpreter__register_function(F, "kilo_onexit", kiloOnExit);
     ForthInterpreter__register_function(F, "kilo_ontimeout", kiloOnTimeout);
@@ -565,15 +564,9 @@ void initInterpreter(void) {
         }
 
         // Execute the plugin file
-        FILE *plugin_file = fopen(full_path, "r");
-        if (plugin_file) {
-            fprintf(stderr, "Info: Loading plugin file '%s'\n", full_path);
-            ForthEvalResult res = ForthInterpreter__run_file(F, plugin_file);
-            fprintf(stderr, "Info: Loaded plugin file '%s', exited with %d\n", full_path, res);
-            fclose(plugin_file);
-        } else {
-            fprintf(stderr, "Warning: Could not open plugin file '%s'\n", full_path);
-        }
+        fprintf(stderr, "Info: Loading plugin file '%s'\n", full_path);
+        ForthEvalResult res = ForthInterpreter__run_file(F, full_path);
+        fprintf(stderr, "Info: Loaded plugin file '%s', exited with %d\n", full_path, res);
     }
 
     closedir(dir);

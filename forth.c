@@ -4,19 +4,13 @@
 
 int main(int argc, char *argv[])
 {
-    ForthInterpreter *in = ForthInterpreter__new();
-    ForthInterpreter__load_builtins(in);
+    ForthInterpreter *in = ForthInterpreter__new(false);
 
     // If a filename is provided as command-line argument, execute it
     if (argc > 1) {
         FILE *file = fopen(argv[1], "r");
-        if (!file) {
-            printf("Error: Could not open file '%s'\n", argv[1]);
-            ForthInterpreter__drop(in);
-            return 1;
-        }
         
-        ForthInterpreter__run_file(in, file);
+        ForthInterpreter__run_file(in, argv[1]);
         fclose(file);
         ForthInterpreter__drop(in);
         return 0;

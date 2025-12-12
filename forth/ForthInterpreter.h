@@ -62,9 +62,10 @@ typedef struct ForthInterpreter
     ForthObject *stack;
     SymbolsTable *symbols;
     ForthParser *parser;
+    bool is_sandboxed;
 } ForthInterpreter;
 
-ForthInterpreter *ForthInterpreter__new(void);
+ForthInterpreter *ForthInterpreter__new(bool is_sandboxed);
 void ForthInterpreter__drop(ForthInterpreter *self);
 
 void ForthInterpreter__register_object(ForthInterpreter *self, char *key, ForthObject *obj);
@@ -86,6 +87,6 @@ ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...
 ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr);
 ForthEvalResult ForthInterpreter__eval_every(ForthInterpreter *self, ForthObject *expr);
 ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text);
-ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, FILE *file);
+ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, char *file_path);
 
 #endif
