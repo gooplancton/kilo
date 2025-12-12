@@ -861,7 +861,10 @@ ForthEvalResult builtin_load_file(ForthInterpreter *in)
     ForthObject__drop(file_path);
 
     if (!in->is_sandboxed)
-        return ForthInterpreter__run_file(in, file_path_copied);
+    {
+        ForthEvalError *errors = ForthInterpreter__run_file(in, file_path_copied);
+        free(errors);
+    }
 
     return Ok;
 }

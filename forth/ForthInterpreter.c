@@ -342,27 +342,40 @@ ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...
     return res;
 }
 
-ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text)
+ForthEvalError *ForthInterpreter__parse_eval(ForthInterpreter *self, char *text)
 {
     // Reset parser state for new input
     ForthParser__reset(self->parser, text);
 
-    ForthEvalResult res = Ok;
+    size_t num_errors = 0;
+    ForthEvalError *errors = malloc(sizeof(ForthEvalError));
+    errors[0].result = Ok;
+
     // Parse and evaluate each complete expression found
     while (1)
     {
         ForthObject *obj = ForthParser__parse_object(self->parser);
         if (!obj)
+            // TODO: detect parsing error by comparing offset with string length
             break;
 
-        res = ForthInterpreter__eval(self, obj);
+        ForthEvalResult res = ForthInterpreter__eval(self, obj);
+        if (res != Ok)
+        {
+            num_errors++;
+            errors = realloc(errors, sizeof(ForthEvalError) * (num_errors + 1));
+            errors[num_errors - 1].offset = self->parser->offset;
+            errors[num_errors - 1].result = res;
+            errors[num_errors].result = Ok;
+        }
+
         ForthObject__drop(obj);
     }
 
-    return res;
+    return errors;
 }
 
-ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, char *file_path)
+ForthEvalError *ForthInterpreter__run_file(ForthInterpreter *self, char *file_path)
 {
     FILE *file = fopen(file_path, "r");
     if (!file)
@@ -377,8 +390,8 @@ ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, char *file_pa
     fread(buffer, 1, file_size, file);
     buffer[file_size] = '\0';
 
-    ForthEvalResult res = ForthInterpreter__parse_eval(self, buffer);
+    ForthEvalError *errors = ForthInterpreter__parse_eval(self, buffer);
     fclose(file);
 
-    return res;
+    return errors;
 }

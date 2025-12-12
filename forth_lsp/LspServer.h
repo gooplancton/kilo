@@ -35,6 +35,7 @@ typedef struct ForthLspServer {
     ForthInterpreter *interpreter;
     HandlerTable *handlers;
     SymbolDefinitionsTable *definitions;
+    ForthEvalError *errors;
     bool requested_shutdown;
 } ForthLspServer;
 

@@ -168,7 +168,11 @@ cJSON *lsp_handle_did_open(ForthLspServer *server, cJSON* params) {
     fprintf(stderr, "Document opened: %s\n", cJSON_GetStringValue(uri));
     fprintf(stderr, "Text length: %zu\n", strlen(cJSON_GetStringValue(text)));
 
-    ForthInterpreter__run_file(server->interpreter, file_path);
+    if (server->errors)
+        free(server->errors);
+
+    server->errors = ForthInterpreter__run_file(server->interpreter, file_path);
+    ForthLspServer__publish_diagnostics(server, cJSON_GetStringValue(uri));
     
     return NULL;
 }
@@ -182,8 +186,12 @@ cJSON *lsp_handle_did_save(ForthLspServer *server, cJSON* params) {
     cJSON* uri = cJSON_GetObjectItem(text_document, "uri");
     // remove the file:// prefix from the uri to get the file path
     char *file_path = cJSON_GetStringValue(uri) + 7;
+
+    if (server->errors)
+        free(server->errors);
     
-    ForthInterpreter__run_file(server->interpreter, file_path);
+    server->errors = ForthInterpreter__run_file(server->interpreter, file_path);
+    ForthLspServer__publish_diagnostics(server, cJSON_GetStringValue(uri));
 
     return NULL;
 }
@@ -257,6 +265,76 @@ cJSON *lsp_handle_symbol(ForthLspServer *server, cJSON* params) {
     }
     
     return result;
+}
+
+void ForthLspServer__publish_diagnostics(ForthLspServer *server, const char *uri)
+{
+    ForthEvalError *errors = server->errors;
+    // Create diagnostics array
+    cJSON* diagnostics = cJSON_CreateArray();
+    
+    for (size_t i = 0; errors[i].result != Ok; i++) {
+        cJSON* diagnostic = cJSON_CreateObject();
+
+        size_t line = 0, col = 0;
+        ForthParser__offset_to_line_col(server->interpreter->parser, errors[i].offset, &line, &col);
+        
+        // For now, use placeholder range (0,0) to (0,0)
+        cJSON* range = cJSON_CreateObject();
+        cJSON* start = cJSON_CreateObject();
+        cJSON_AddNumberToObject(start, "line", line);
+        cJSON_AddNumberToObject(start, "character", col);
+        cJSON_AddItemToObject(range, "start", start);
+        
+        cJSON* end = cJSON_CreateObject();
+        cJSON_AddNumberToObject(end, "line", line);
+        cJSON_AddNumberToObject(end, "character", col);
+        cJSON_AddItemToObject(range, "end", end);
+        
+        cJSON_AddItemToObject(diagnostic, "range", range);
+        
+        // Severity: 1 = Error
+        cJSON_AddNumberToObject(diagnostic, "severity", 1);
+        
+        // Message based on error type
+        const char* message = "Unknown error";
+        switch (errors[i].result) {
+            case ArityError:
+                message = "Arity error: wrong number of arguments";
+                break;
+            case TypeError:
+                message = "Type error: invalid type";
+                break;
+            case MathError:
+                message = "Math error: division by zero or invalid operation";
+                break;
+            case ParsingError:
+                message = "Parsing error";
+                break;
+            case IndexError:
+                message = "Index error: out of bounds";
+                break;
+            case UnknownSymbolError:
+                message = "Unknown symbol";
+                break;
+            case FileNotFoundError:
+                message = "File not found";
+                break;
+            default:
+                break;
+        }
+        cJSON_AddStringToObject(diagnostic, "message", message);
+        
+        cJSON_AddItemToArray(diagnostics, diagnostic);
+    }
+    
+    // Create params object
+    cJSON* params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "uri", uri);
+    cJSON_AddItemToObject(params, "diagnostics", diagnostics);
+    
+    // Send notification
+    send_notification("textDocument/publishDiagnostics", params);
 }
 
 

@@ -70,6 +70,24 @@ size_t ForthParser__line_col_to_offset(ForthParser *self, size_t line, size_t co
     return offset;
 }
 
+void ForthParser__offset_to_line_col(ForthParser *self, size_t offset, size_t *out_line, size_t *out_col)
+{
+    size_t current_line = 0;
+    size_t current_char = 0;
+    
+    for (size_t i = 0; i < offset && self->string[i] != '\0'; i++) {
+        if (self->string[i] == '\n') {
+            current_line++;
+            current_char = 0;
+        } else {
+            current_char++;
+        }
+    }
+
+    *out_line = current_line;
+    *out_col = current_char;
+}
+
 ForthObject *ForthParser__parse_string(ForthParser *self)
 {
     char *starting_char = ForthParser__char(self);

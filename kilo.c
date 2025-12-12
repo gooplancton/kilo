@@ -565,8 +565,8 @@ void initInterpreter(void) {
 
         // Execute the plugin file
         fprintf(stderr, "Info: Loading plugin file '%s'\n", full_path);
-        ForthEvalResult res = ForthInterpreter__run_file(F, full_path);
-        fprintf(stderr, "Info: Loaded plugin file '%s', exited with %d\n", full_path, res);
+        ForthEvalError *errors = ForthInterpreter__run_file(F, full_path);
+        free(errors);
     }
 
     closedir(dir);

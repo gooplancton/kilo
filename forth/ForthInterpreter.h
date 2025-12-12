@@ -84,9 +84,15 @@ that ALL the objects passed to it are dropped.
 */
 ForthEvalResult ForthInterpreter__pop_args(ForthInterpreter *self, size_t n, ...);
 
+typedef struct ForthEvalError {
+    size_t offset;
+    ForthEvalResult result;
+    // char message[256];
+} ForthEvalError;
+
 ForthEvalResult ForthInterpreter__eval(ForthInterpreter *self, ForthObject *expr);
 ForthEvalResult ForthInterpreter__eval_every(ForthInterpreter *self, ForthObject *expr);
-ForthEvalResult ForthInterpreter__parse_eval(ForthInterpreter *self, char *text);
-ForthEvalResult ForthInterpreter__run_file(ForthInterpreter *self, char *file_path);
+ForthEvalError *ForthInterpreter__parse_eval(ForthInterpreter *self, char *text);
+ForthEvalError *ForthInterpreter__run_file(ForthInterpreter *self, char *file_path);
 
 #endif
