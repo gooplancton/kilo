@@ -1,5 +1,9 @@
-#include "ForthBuiltins.h"
+// Must come before any header (including transitively, via ForthBuiltins.h)
+// pulls in stdio.h, otherwise it locks in too old a POSIX level and getline()
+// isn't declared.
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include "ForthBuiltins.h"
 #include <stdlib.h>
 
 int main(int argc, char *argv[])
