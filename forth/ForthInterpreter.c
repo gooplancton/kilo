@@ -379,7 +379,16 @@ ForthEvalError *ForthInterpreter__run_file(ForthInterpreter *self, char *file_pa
 {
     FILE *file = fopen(file_path, "r");
     if (!file)
-        return FileNotFoundError;
+    {
+        // Callers scan this array until they find an Ok-result sentinel entry,
+        // so the real error must be followed by one (see ForthInterpreter__parse_eval).
+        ForthEvalError *errors = malloc(sizeof(ForthEvalError) * 2);
+        errors[0].offset = 0;
+        errors[0].result = FileNotFoundError;
+        errors[1].offset = 0;
+        errors[1].result = Ok;
+        return errors;
+    }
 
     fseek(file, 0, SEEK_END);
     size_t file_size = ftell(file);
