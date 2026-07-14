@@ -1,6 +1,11 @@
-#include "ForthBuiltins.h"
+// Must come before any header (including transitively, via ForthBuiltins.h)
+// pulls in stdio.h, otherwise it locks in too old a POSIX level and getline()
+// isn't declared.
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include "ForthBuiltins.h"
 #include <stdlib.h>
+#include <string.h>
 
 int main(int argc, char *argv[])
 {
@@ -8,14 +13,11 @@ int main(int argc, char *argv[])
 
     // If a filename is provided as command-line argument, execute it
     if (argc > 1) {
-        FILE *file = fopen(argv[1], "r");
-        
         ForthEvalError *errors = ForthInterpreter__run_file(in, argv[1]);
         for (size_t i = 0; errors[i].result != Ok; i++)
             printf("Error: %d at offset %d\n", errors[i].result, (int)errors[i].offset);
 
         free(errors);
-        fclose(file);
         ForthInterpreter__drop(in);
 
         return 0;
@@ -40,7 +42,15 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        ForthEvalError *errors = ForthInterpreter__parse_eval(in, line);
+        // ForthParser__reset() takes ownership of the string it's given and
+        // frees it on the next call. `line` is getline()'s reused buffer,
+        // owned by this loop, so hand the parser its own copy instead of
+        // letting the two ownership models collide (use-after-free).
+        size_t line_len = strlen(line) + 1;
+        char *line_copy = malloc(line_len);
+        memcpy(line_copy, line, line_len);
+
+        ForthEvalError *errors = ForthInterpreter__parse_eval(in, line_copy);
         for (size_t i = 0; errors[i].result != Ok; i++)
             printf("Error: %d at offset %d\n", errors[i].result, (int)errors[i].offset);
 

@@ -1,8 +1,29 @@
+// Feature-test macros must come before any system header is pulled in so
+// that dprintf/usleep (and, on glibc, secure_getenv) are actually declared
+// under -std=c11 -pedantic.
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#else
+#define _GNU_SOURCE
+#endif
+
 #include "ForthBuiltins.h"
 #include "ForthInterpreter.h"
 #include "ForthObject.h"
+#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+
+#if defined(__APPLE__)
+// macOS's libc has no secure_getenv; approximate it with issetugid(), which
+// is what secure_getenv's glibc implementation is checking for anyway.
+static char *secure_getenv(const char *name)
+{
+    if (issetugid())
+        return NULL;
+    return getenv(name);
+}
+#endif
 
 // Macros for common patterns
 #define BINARY_MATH_OP(op_name, operation)                                                      \
